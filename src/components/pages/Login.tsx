@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Input } from '../shared/Input';
 import { Button } from '../shared/Button';
 
 export const Login: React.FC = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -44,10 +45,12 @@ export const Login: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // TODO: Implement login logic
-      console.log('Login attempt with:', formData);
+      // TODO: API 호출로 로그인 처리
+      console.log('로그인 시도:', formData);
+      // 성공 시 홈페이지로 이동
+      navigate('/');
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error('로그인 실패:', error);
     } finally {
       setIsLoading(false);
     }
@@ -57,13 +60,13 @@ export const Login: React.FC = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value,
+      [name]: value
     }));
-    // Clear error when user starts typing
+    // 에러 메시지 초기화
     if (errors[name as keyof typeof errors]) {
       setErrors(prev => ({
         ...prev,
-        [name]: '',
+        [name]: ''
       }));
     }
   };
@@ -77,11 +80,12 @@ export const Login: React.FC = () => {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             아직 계정이 없으신가요?{' '}
-            <Link to="/signup" className="font-medium text-primary hover:text-primary-dark">
+            <Link to="/register" className="font-medium text-primary hover:text-primary/90">
               회원가입하기
             </Link>
           </p>
         </div>
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <Input
@@ -120,7 +124,7 @@ export const Login: React.FC = () => {
             </div>
 
             <div className="text-sm">
-              <Link to="/forgot-password" className="font-medium text-primary hover:text-primary-dark">
+              <Link to="/forgot-password" className="font-medium text-primary hover:text-primary/90">
                 비밀번호를 잊으셨나요?
               </Link>
             </div>
@@ -134,44 +138,6 @@ export const Login: React.FC = () => {
           >
             로그인
           </Button>
-
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-50 text-gray-500">
-                  또는
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
-              >
-                <img
-                  className="h-5 w-5 mr-2"
-                  src="https://www.svgrepo.com/show/475656/google-color.svg"
-                  alt="Google logo"
-                />
-                Google
-              </button>
-              <button
-                type="button"
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
-              >
-                <img
-                  className="h-5 w-5 mr-2"
-                  src="https://www.svgrepo.com/show/475647/github-color.svg"
-                  alt="GitHub logo"
-                />
-                GitHub
-              </button>
-            </div>
-          </div>
         </form>
       </div>
     </div>

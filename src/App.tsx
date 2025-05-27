@@ -1,15 +1,15 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Header } from './components/layout/Header';
-import { Home } from './components/pages/Home';
+import { HomePage } from './components/pages/HomePage';
 import { Login } from './components/pages/Login';
-import { SignUp } from './components/pages/SignUp';
+import { Register } from './pages/Register';
 import { InterviewSetting } from './components/pages/interview/InterviewSetting';
 import { EnvironmentCheck } from './components/pages/interview/EnvironmentCheck';
 import { InterviewSession } from './components/pages/interview/InterviewSession';
 import { FeedbackReport } from './components/pages/interview/FeedbackReport';
 import { Library } from './components/pages/Library';
-import { MyPage } from './components/pages/MyPage';
+import { MyPage } from './pages/MyPage';
 
 function App() {
   return (
@@ -17,9 +17,9 @@ function App() {
       <div className="min-h-screen bg-gray-50">
         <Header />
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<SignUp />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/interview/setting" element={<InterviewSetting />} />
           <Route path="/interview/check-environment" element={<EnvironmentCheck />} />
           <Route path="/interview/session" element={<InterviewSession />} />

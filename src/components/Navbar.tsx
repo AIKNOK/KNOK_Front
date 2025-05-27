@@ -1,7 +1,6 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import Link from 'next/link';
 import { twMerge } from 'tailwind-merge';
+import { motion } from 'framer-motion';
 
 const navItems = [
   { name: 'Home', path: '/' },
@@ -10,25 +9,20 @@ const navItems = [
   { name: 'Library', path: '/library' },
 ];
 
-export const Header: React.FC = () => {
-  const location = useLocation();
-
+export default function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-[92px]">
-          <Link to="/" className="flex items-center space-x-2">
-            <img src="/images/logo.png" alt="KNOK Logo" className="h-12 w-auto" />
-            <span className="text-[32px] font-semibold text-primary tracking-tighter">
-              KNOK
-            </span>
+          <Link href="/" className="text-[32px] font-semibold text-primary tracking-tighter">
+            Waves
           </Link>
 
           <div className="hidden md:flex items-center space-x-10">
             {navItems.map((item) => (
               <Link
                 key={item.name}
-                to={item.path}
+                href={item.path}
                 className={twMerge(
                   'text-base font-medium tracking-tight hover:text-primary transition-colors',
                   location.pathname === item.path ? 'text-primary' : 'text-gray-900'
@@ -45,7 +39,7 @@ export const Header: React.FC = () => {
               whileTap={{ scale: 0.95 }}
             >
               <Link
-                to="/login"
+                href="/login"
                 className="bg-primary text-white px-6 py-3 rounded-md text-base font-medium tracking-tight hover:bg-primary/90 transition-colors"
               >
                 Login
@@ -56,4 +50,4 @@ export const Header: React.FC = () => {
       </div>
     </nav>
   );
-}; 
+} 
