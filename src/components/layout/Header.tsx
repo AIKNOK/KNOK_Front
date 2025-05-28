@@ -1,43 +1,65 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Button } from '../shared/Button';
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { twMerge } from 'tailwind-merge';
 
 export const Header: React.FC = () => {
+  const navigate = useNavigate();
+  const [token, setToken] = useState(localStorage.getItem('token'));
+
+  useEffect(() => {
+    const onStorageChange = () => setToken(localStorage.getItem('token'));
+    window.addEventListener('storageChange', onStorageChange);
+    return () => window.removeEventListener('storageChange', onStorageChange);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    navigate('/login');
+    window.dispatchEvent(new Event('storageChange'));
+  };
+
   return (
-    <header className="bg-white shadow-sm">
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
-          <div className="flex items-center">
-            <Link to="/" className="text-2xl font-bold text-primary">
-              Interview Platform
-            </Link>
-            <div className="hidden md:block ml-10">
-              <div className="flex space-x-4">
-                <Link to="/interview" className="text-gray-700 hover:text-primary px-3 py-2 rounded-md">
-                  면접
-                </Link>
-                <Link to="/library" className="text-gray-700 hover:text-primary px-3 py-2 rounded-md">
-                  라이브러리
-                </Link>
-                <Link to="/feedback" className="text-gray-700 hover:text-primary px-3 py-2 rounded-md">
-                  피드백
-                </Link>
-                <Link to="/about" className="text-gray-700 hover:text-primary px-3 py-2 rounded-md">
-                  소개
-                </Link>
-              </div>
-            </div>
-          </div>
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-[92px]">
+          <Link to="/" className="flex items-center space-x-2">
+            <img src="/images/logo.png" alt="KNOK Logo" className="h-12 w-auto" />
+            <span className="text-[32px] font-semibold text-primary tracking-tighter">KNOK</span>
+          </Link>
+          <div className="hidden md:flex items-center space-x-10" />
           <div className="flex items-center space-x-4">
-            <Link to="/login">
-              <Button variant="outline" size="sm">로그인</Button>
-            </Link>
-            <Link to="/signup">
-              <Button size="sm">회원가입</Button>
-            </Link>
+            {!token ? (
+              <>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Link to="/login" className="bg-primary text-white px-6 py-3 rounded-md text-base font-medium tracking-tight hover:bg-primary/90 transition-colors">
+                    Login
+                  </Link>
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Link to="/register" className="border border-primary text-primary px-6 py-3 rounded-md text-base font-medium tracking-tight hover:bg-primary hover:text-white transition-colors">
+                    Sign Up
+                  </Link>
+                </motion.div>
+              </>
+            ) : (
+              <>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Link to="/mypage" className="bg-primary text-white px-6 py-3 rounded-md text-base font-medium tracking-tight hover:bg-primary/90 transition-colors">
+                    마이페이지
+                  </Link>
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <button onClick={handleLogout} className="border border-primary text-primary px-6 py-3 rounded-md text-base font-medium tracking-tight hover:bg-primary hover:text-white transition-colors">
+                    로그아웃
+                  </button>
+                </motion.div>
+              </>
+            )}
           </div>
         </div>
-      </nav>
-    </header>
+      </div>
+    </nav>
   );
-}; 
+};

@@ -1,24 +1,16 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Input } from '../shared/Input';
 import { Button } from '../shared/Button';
 
 export const Login: React.FC = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-  const [errors, setErrors] = useState({
-    email: '',
-    password: '',
-  });
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [errors, setErrors] = useState({ email: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
 
   const validateForm = () => {
-    const newErrors = {
-      email: '',
-      password: '',
-    };
+    const newErrors = { email: '', password: '' };
     let isValid = true;
 
     if (!formData.email) {
@@ -44,10 +36,44 @@ export const Login: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // TODO: Implement login logic
-      console.log('Login attempt with:', formData);
-    } catch (error) {
-      console.error('Login failed:', error);
+      // 로그인 요청
+      const response = await fetch('/api/login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setErrors(prev => ({ ...prev, email: '등록되지 않은 이메일입니다' }));
+        } else if (response.status === 401) {
+          setErrors(prev => ({ ...prev, password: '비밀번호가 올바르지 않습니다' }));
+        } else {
+          setErrors(prev => ({ ...prev, email: '로그인에 실패했습니다' }));
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      // 반드시 access_token, id_token 둘 다 저장!
+      if (data.access_token) localStorage.setItem('access_token', data.access_token);
+      if (data.id_token) localStorage.setItem('id_token', data.id_token);
+
+      // 참고: 인증 API 호출에는 반드시 id_token 사용
+      if (!data.id_token) {
+        alert('id_token이 응답에 포함되어 있지 않습니다.');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('로그인 성공! id_token:', data.id_token);
+      window.dispatchEvent(new Event('storageChange'));
+
+      navigate('/mypage');
+    } catch (err) {
+      setErrors(prev => ({ ...prev, email: '서버와의 통신에 실패했습니다' }));
+      console.error('로그인 실패:', err);
     } finally {
       setIsLoading(false);
     }
@@ -55,16 +81,9 @@ export const Login: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-    // Clear error when user starts typing
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name as keyof typeof errors]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: '',
-      }));
+      setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
@@ -72,16 +91,15 @@ export const Login: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            로그인
-          </h2>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">로그인</h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             아직 계정이 없으신가요?{' '}
-            <Link to="/signup" className="font-medium text-primary hover:text-primary-dark">
+            <Link to="/register" className="font-medium text-primary hover:text-primary/90">
               회원가입하기
             </Link>
           </p>
         </div>
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <Input
@@ -118,62 +136,18 @@ export const Login: React.FC = () => {
                 로그인 상태 유지
               </label>
             </div>
-
             <div className="text-sm">
-              <Link to="/forgot-password" className="font-medium text-primary hover:text-primary-dark">
+              <Link to="/forgot-password" className="font-medium text-primary hover:text-primary/90">
                 비밀번호를 잊으셨나요?
               </Link>
             </div>
           </div>
 
-          <Button
-            type="submit"
-            isLoading={isLoading}
-            className="w-full"
-            size="lg"
-          >
+          <Button type="submit" isLoading={isLoading} className="w-full" size="lg">
             로그인
           </Button>
-
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-50 text-gray-500">
-                  또는
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
-              >
-                <img
-                  className="h-5 w-5 mr-2"
-                  src="https://www.svgrepo.com/show/475656/google-color.svg"
-                  alt="Google logo"
-                />
-                Google
-              </button>
-              <button
-                type="button"
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
-              >
-                <img
-                  className="h-5 w-5 mr-2"
-                  src="https://www.svgrepo.com/show/475647/github-color.svg"
-                  alt="GitHub logo"
-                />
-                GitHub
-              </button>
-            </div>
-          </div>
         </form>
       </div>
     </div>
   );
-}; 
+};

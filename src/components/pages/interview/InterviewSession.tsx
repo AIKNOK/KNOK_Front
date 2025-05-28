@@ -70,7 +70,7 @@ export const InterviewSession: React.FC = () => {
   }, [navigate]);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
     if (isRecording) {
       timer = setInterval(() => {
         setCurrentTime(prev => {
