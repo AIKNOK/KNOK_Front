@@ -19,12 +19,17 @@ interface UserProfile {
   company: string;
   careerYears: number;
   profileImage: string;
+  resumeUrl?: string;
 }
 
 export const MyPage: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'profile' | 'history'>('profile');
   const [isEditing, setIsEditing] = useState(false);
+
+  // 이력서 업로드 관련 상태
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const [profile, setProfile] = useState<UserProfile>({
     name: '홍길동',
@@ -33,39 +38,59 @@ export const MyPage: React.FC = () => {
     company: '테크 컴퍼니',
     careerYears: 3,
     profileImage: 'https://via.placeholder.com/150',
+    resumeUrl: 'https://example.com/resume.pdf',
   });
 
   const [interviewHistory] = useState<InterviewHistory[]>([
-    {
-      id: '1',
-      date: '2024-03-15',
-      position: '시니어 프론트엔드 개발자',
-      duration: 30,
-      score: 85,
-      status: 'completed',
-    },
-    {
-      id: '2',
-      date: '2024-03-10',
-      position: '프론트엔드 리드',
-      duration: 45,
-      score: 92,
-      status: 'completed',
-    },
-    {
-      id: '3',
-      date: '2024-03-05',
-      position: '풀스택 개발자',
-      duration: 30,
-      score: 78,
-      status: 'completed',
-    },
+    { id: '1', date: '2024-03-15', position: '시니어 프론트엔드 개발자', duration: 30, score: 85, status: 'completed' },
+    { id: '2', date: '2024-03-10', position: '프론트엔드 리드', duration: 45, score: 92, status: 'completed' },
+    { id: '3', date: '2024-03-05', position: '풀스택 개발자', duration: 30, score: 78, status: 'completed' },
   ]);
 
   const handleProfileUpdate = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement profile update logic
     setIsEditing(false);
+  };
+
+  // 파일 선택 핸들러
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  // 파일 업로드 핸들러
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      alert('파일을 선택해주세요.');
+      return;
+    }
+    setIsUploading(true);
+
+    const formData = new FormData();
+    formData.append('resume', selectedFile);
+
+    try {
+      const res = await fetch('http://localhost:4000/api/resume/upload/', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || '업로드 실패');
+      }
+
+      const data = await res.json();
+      setProfile(prev => ({ ...prev, resumeUrl: data.file_url || data.fileUrl }));
+      setSelectedFile(null);
+      alert('이력서 업로드 성공!');
+    } catch (error: any) {
+      alert(`업로드 중 오류: ${error.message}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const getScoreColor = (score: number) => {
@@ -79,29 +104,16 @@ export const MyPage: React.FC = () => {
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          {/* 탭 네비게이션 */}
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex">
               <button
-                className={`
-                  w-1/2 py-4 px-1 text-center border-b-2 text-sm font-medium
-                  ${activeTab === 'profile'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
+                className={`w-1/2 py-4 px-1 text-center border-b-2 text-sm font-medium ${activeTab === 'profile' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
                 onClick={() => setActiveTab('profile')}
               >
                 프로필
               </button>
               <button
-                className={`
-                  w-1/2 py-4 px-1 text-center border-b-2 text-sm font-medium
-                  ${activeTab === 'history'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
+                className={`w-1/2 py-4 px-1 text-center border-b-2 text-sm font-medium ${activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
                 onClick={() => setActiveTab('history')}
               >
                 면접 기록
@@ -109,7 +121,6 @@ export const MyPage: React.FC = () => {
             </nav>
           </div>
 
-          {/* 프로필 탭 */}
           {activeTab === 'profile' && (
             <div className="p-8">
               <div className="flex items-start">
@@ -124,9 +135,7 @@ export const MyPage: React.FC = () => {
                   {!isEditing ? (
                     <>
                       <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900">
-                          {profile.name}
-                        </h2>
+                        <h2 className="text-2xl font-bold text-gray-900">{profile.name}</h2>
                         <p className="text-gray-500">{profile.email}</p>
                       </div>
                       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -142,12 +151,39 @@ export const MyPage: React.FC = () => {
                           <dt className="text-sm font-medium text-gray-500">경력</dt>
                           <dd className="mt-1 text-sm text-gray-900">{profile.careerYears}년</dd>
                         </div>
+
+                        {/* 이력서 업로드/교체 UI */}
+                        <div className="sm:col-span-2 space-y-2">
+                          <dt className="text-sm font-medium text-gray-500">이력서</dt>
+                          {profile.resumeUrl ? (
+                            <dd className="mt-1 text-sm">
+                              <a
+                                href={profile.resumeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 underline"
+                              >
+                                업로드된 이력서 보기 (PDF)
+                              </a>
+                            </dd>
+                          ) : (
+                            <dd className="mt-1 text-sm text-gray-400">업로드된 이력서가 없습니다.</dd>
+                          )}
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            onChange={handleFileChange}
+                          />
+                          <Button
+                            onClick={handleUpload}
+                            disabled={isUploading || !selectedFile}
+                          >
+                            {isUploading ? '업로드 중...' : profile.resumeUrl ? '이력서 교체' : '이력서 업로드'}
+                          </Button>
+                        </div>
                       </dl>
                       <div className="mt-6">
-                        <Button
-                          variant="outline"
-                          onClick={() => setIsEditing(true)}
-                        >
+                        <Button variant="outline" onClick={() => setIsEditing(true)}>
                           프로필 수정
                         </Button>
                       </div>
@@ -191,18 +227,8 @@ export const MyPage: React.FC = () => {
                         required
                       />
                       <div className="flex space-x-4">
-                        <Button
-                          type="submit"
-                          className="flex-1"
-                        >
-                          저장
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => setIsEditing(false)}
-                        >
+                        <Button type="submit" className="flex-1">저장</Button>
+                        <Button type="button" variant="outline" className="flex-1" onClick={() => setIsEditing(false)}>
                           취소
                         </Button>
                       </div>
@@ -213,40 +239,25 @@ export const MyPage: React.FC = () => {
             </div>
           )}
 
-          {/* 면접 기록 탭 */}
           {activeTab === 'history' && (
             <div className="p-8">
               <div className="space-y-6">
                 {interviewHistory.map(interview => (
-                  <div
-                    key={interview.id}
-                    className="bg-gray-50 rounded-lg p-6"
-                  >
+                  <div key={interview.id} className="bg-gray-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <h3 className="text-lg font-medium text-gray-900">
-                          {interview.position}
-                        </h3>
+                        <h3 className="text-lg font-medium text-gray-900">{interview.position}</h3>
                         <p className="text-sm text-gray-500">
                           {new Date(interview.date).toLocaleDateString('ko-KR')} · {interview.duration}분
                         </p>
                       </div>
-                      <span className={`text-lg font-semibold ${getScoreColor(interview.score)}`}>
-                        {interview.score}점
-                      </span>
+                      <span className={`text-lg font-semibold ${getScoreColor(interview.score)}`}>{interview.score}점</span>
                     </div>
                     <div className="flex justify-end space-x-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/interview/feedback/${interview.id}`)}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => navigate(`/interview/feedback/${interview.id}`)}>
                         피드백 보기
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => navigate('/interview/setting')}
-                      >
+                      <Button size="sm" onClick={() => navigate('/interview/setting')}>
                         다시 도전하기
                       </Button>
                     </div>
@@ -259,4 +270,4 @@ export const MyPage: React.FC = () => {
       </div>
     </div>
   );
-}; 
+};

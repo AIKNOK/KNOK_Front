@@ -1,25 +1,24 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { Input } from '../shared/Input';
 import { Button } from '../shared/Button';
 
+// 환경변수로 API 서버 호스트 관리
+// frontend/.env (프로젝트 루트)에 아래를 추가하세요:
+// VITE_API_BASE_URL=http://127.0.0.1:8000
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL, // 예: http://127.0.0.1:8000
+});
+
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-  const [errors, setErrors] = useState({
-    email: '',
-    password: '',
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [errors, setErrors] = useState({ email: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
 
   const validateForm = () => {
-    const newErrors = {
-      email: '',
-      password: '',
-    };
+    const newErrors = { email: '', password: '' };
     let isValid = true;
 
     if (!formData.email) {
@@ -45,12 +44,24 @@ export const Login: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // TODO: API 호출로 로그인 처리
-      console.log('로그인 시도:', formData);
-      // 성공 시 홈페이지로 이동
-      navigate('/');
-    } catch (error) {
-      console.error('로그인 실패:', error);
+      // Django DRF 로그인 엔드포인트에 맞춘 POST
+      const response = await api.post('/api/login/', formData);
+      const accessToken = response.data.token;
+
+      // 토큰 저장 및 헤더 갱신 이벤트
+      localStorage.setItem('token', accessToken);
+      window.dispatchEvent(new Event('storageChange'));
+
+      // 마이페이지 이동
+      navigate('/mypage');
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setErrors(prev => ({ ...prev, email: '등록되지 않은 이메일입니다' }));
+      } else if (err.response?.status === 401) {
+        setErrors(prev => ({ ...prev, password: '비밀번호가 올바르지 않습니다' }));
+      } else {
+        console.error('로그인 실패:', err);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -58,16 +69,9 @@ export const Login: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // 에러 메시지 초기화
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name as keyof typeof errors]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
+      setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
@@ -75,9 +79,7 @@ export const Login: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            로그인
-          </h2>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">로그인</h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             아직 계정이 없으신가요?{' '}
             <Link to="/register" className="font-medium text-primary hover:text-primary/90">
@@ -130,16 +132,11 @@ export const Login: React.FC = () => {
             </div>
           </div>
 
-          <Button
-            type="submit"
-            isLoading={isLoading}
-            className="w-full"
-            size="lg"
-          >
+          <Button type="submit" isLoading={isLoading} className="w-full" size="lg">
             로그인
           </Button>
         </form>
       </div>
     </div>
   );
-}; 
+};
