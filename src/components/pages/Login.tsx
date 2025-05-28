@@ -1,15 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { Input } from '../shared/Input';
 import { Button } from '../shared/Button';
-
-// 환경변수로 API 서버 호스트 관리
-// frontend/.env (프로젝트 루트)에 아래를 추가하세요:
-// VITE_API_BASE_URL=http://127.0.0.1:8000
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL, // 예: http://127.0.0.1:8000
-});
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -44,24 +36,44 @@ export const Login: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // Django DRF 로그인 엔드포인트에 맞춘 POST
-      const response = await api.post('/api/login/', formData);
-      const accessToken = response.data.token;
+      // 로그인 요청
+      const response = await fetch('/api/login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
 
-      // 토큰 저장 및 헤더 갱신 이벤트
-      localStorage.setItem('token', accessToken);
+      if (!response.ok) {
+        if (response.status === 404) {
+          setErrors(prev => ({ ...prev, email: '등록되지 않은 이메일입니다' }));
+        } else if (response.status === 401) {
+          setErrors(prev => ({ ...prev, password: '비밀번호가 올바르지 않습니다' }));
+        } else {
+          setErrors(prev => ({ ...prev, email: '로그인에 실패했습니다' }));
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+      // 반드시 access_token, id_token 둘 다 저장!
+      if (data.access_token) localStorage.setItem('access_token', data.access_token);
+      if (data.id_token) localStorage.setItem('id_token', data.id_token);
+
+      // 참고: 인증 API 호출에는 반드시 id_token 사용
+      if (!data.id_token) {
+        alert('id_token이 응답에 포함되어 있지 않습니다.');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('로그인 성공! id_token:', data.id_token);
       window.dispatchEvent(new Event('storageChange'));
 
-      // 마이페이지 이동
       navigate('/mypage');
-    } catch (err: any) {
-      if (err.response?.status === 404) {
-        setErrors(prev => ({ ...prev, email: '등록되지 않은 이메일입니다' }));
-      } else if (err.response?.status === 401) {
-        setErrors(prev => ({ ...prev, password: '비밀번호가 올바르지 않습니다' }));
-      } else {
-        console.error('로그인 실패:', err);
-      }
+    } catch (err) {
+      setErrors(prev => ({ ...prev, email: '서버와의 통신에 실패했습니다' }));
+      console.error('로그인 실패:', err);
     } finally {
       setIsLoading(false);
     }
@@ -124,7 +136,6 @@ export const Login: React.FC = () => {
                 로그인 상태 유지
               </label>
             </div>
-
             <div className="text-sm">
               <Link to="/forgot-password" className="font-medium text-primary hover:text-primary/90">
                 비밀번호를 잊으셨나요?

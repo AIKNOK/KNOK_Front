@@ -1,271 +1,197 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef } from 'react';
 import { Button } from '../shared/Button';
-import { Input } from '../shared/Input';
-
-interface InterviewHistory {
-  id: string;
-  date: string;
-  position: string;
-  duration: number;
-  score: number;
-  status: 'completed' | 'in-progress';
-}
-
-interface UserProfile {
-  name: string;
-  email: string;
-  position: string;
-  company: string;
-  careerYears: number;
-  profileImage: string;
-  resumeUrl?: string;
-}
 
 export const MyPage: React.FC = () => {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'profile' | 'history'>('profile');
-  const [isEditing, setIsEditing] = useState(false);
-
-  // 이력서 업로드 관련 상태
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [resume, setResume] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadedResumeUrl, setUploadedResumeUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [profile, setProfile] = useState<UserProfile>({
-    name: '홍길동',
-    email: 'hong@example.com',
-    position: '프론트엔드 개발자',
-    company: '테크 컴퍼니',
-    careerYears: 3,
-    profileImage: 'https://via.placeholder.com/150',
-    resumeUrl: 'https://example.com/resume.pdf',
-  });
+  // 토큰을 항상 id_token → access_token 순서로 가져옴 (id_token이 없으면 access_token 사용)
+  const getToken = () =>
+    localStorage.getItem('id_token') || localStorage.getItem('access_token');
 
-  const [interviewHistory] = useState<InterviewHistory[]>([
-    { id: '1', date: '2024-03-15', position: '시니어 프론트엔드 개발자', duration: 30, score: 85, status: 'completed' },
-    { id: '2', date: '2024-03-10', position: '프론트엔드 리드', duration: 45, score: 92, status: 'completed' },
-    { id: '3', date: '2024-03-05', position: '풀스택 개발자', duration: 30, score: 78, status: 'completed' },
-  ]);
-
-  const handleProfileUpdate = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsEditing(false);
-  };
-
-  // 파일 선택 핸들러
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      setResume(e.target.files[0]);
     }
   };
 
-  // 파일 업로드 핸들러
   const handleUpload = async () => {
-    if (!selectedFile) {
-      alert('파일을 선택해주세요.');
-      return;
-    }
-    setIsUploading(true);
+    if (!resume) return;
 
     const formData = new FormData();
-    formData.append('resume', selectedFile);
+    formData.append('resume', resume);
 
+    const token = getToken();
+    if (!token) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    setIsUploading(true);
     try {
-      const res = await fetch('http://localhost:4000/api/resume/upload/', {
+      const response = await fetch('/api/resume/upload/', {
         method: 'POST',
-        credentials: 'include',
         body: formData,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || '업로드 실패');
+      console.log('[업로드 응답]', response.status, response);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[업로드 에러응답]', errorText);
+        throw new Error('이력서 업로드에 실패했습니다.');
       }
 
-      const data = await res.json();
-      setProfile(prev => ({ ...prev, resumeUrl: data.file_url || data.fileUrl }));
-      setSelectedFile(null);
-      alert('이력서 업로드 성공!');
-    } catch (error: any) {
-      alert(`업로드 중 오류: ${error.message}`);
+      const data = await response.json();
+      if (data.file_url) {
+        setUploadedResumeUrl(data.file_url);
+        alert('이력서가 성공적으로 업로드되었습니다.');
+      } else {
+        alert('이력서가 성공적으로 업로드되었습니다.');
+      }
+
+      setResume(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (error) {
+      console.error('이력서 업로드 실패:', error);
+      alert('이력서 업로드 중 오류가 발생했습니다.');
     } finally {
       setIsUploading(false);
     }
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-green-600';
-    if (score >= 80) return 'text-blue-600';
-    if (score >= 70) return 'text-yellow-600';
-    return 'text-red-600';
+  const handleDelete = async () => {
+    const token = getToken();
+    if (!token) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/resume/delete/', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[삭제 에러응답]', errorText);
+        throw new Error('이력서 삭제에 실패했습니다.');
+      }
+
+      alert('이력서가 성공적으로 삭제되었습니다.');
+      setResume(null);
+      setUploadedResumeUrl(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (error) {
+      console.error('이력서 삭제 실패:', error);
+      alert('이력서 삭제 중 오류가 발생했습니다.');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex">
-              <button
-                className={`w-1/2 py-4 px-1 text-center border-b-2 text-sm font-medium ${activeTab === 'profile' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                onClick={() => setActiveTab('profile')}
+    <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-center">
+          <h2 className="text-3xl font-normal text-gray-900">마이 페이지</h2>
+          <p className="mt-2 text-sm text-gray-600">
+            이력서를 업로드하고 AI 면접을 준비하세요
+          </p>
+        </div>
+
+        <div className="mt-8 space-y-6 bg-white shadow-sm rounded-lg p-6 border border-gray-200">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              이력서 업로드
+            </label>
+            <div className="mt-1 flex items-center space-x-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={handleFileChange}
+                className="block w-full text-sm text-gray-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded-md file:border-0
+                  file:text-sm file:font-medium
+                  file:bg-primary file:text-white
+                  hover:file:cursor-pointer hover:file:bg-primary/90
+                  hover:file:text-white"
+              />
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                onClick={handleUpload}
+                isLoading={isUploading}
+                disabled={!resume || isUploading}
               >
-                프로필
-              </button>
-              <button
-                className={`w-1/2 py-4 px-1 text-center border-b-2 text-sm font-medium ${activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                onClick={() => setActiveTab('history')}
-              >
-                면접 기록
-              </button>
-            </nav>
+                업로드
+              </Button>
+            </div>
+            <p className="mt-2 text-sm text-gray-500">
+              PDF, DOC, DOCX 파일 형식을 지원합니다
+            </p>
           </div>
 
-          {activeTab === 'profile' && (
-            <div className="p-8">
-              <div className="flex items-start">
-                <div className="flex-shrink-0">
-                  <img
-                    src={profile.profileImage}
-                    alt="Profile"
-                    className="h-32 w-32 rounded-full object-cover"
-                  />
-                </div>
-                <div className="ml-6 flex-1">
-                  {!isEditing ? (
-                    <>
-                      <div className="mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900">{profile.name}</h2>
-                        <p className="text-gray-500">{profile.email}</p>
-                      </div>
-                      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                          <dt className="text-sm font-medium text-gray-500">직무</dt>
-                          <dd className="mt-1 text-sm text-gray-900">{profile.position}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-sm font-medium text-gray-500">회사</dt>
-                          <dd className="mt-1 text-sm text-gray-900">{profile.company}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-sm font-medium text-gray-500">경력</dt>
-                          <dd className="mt-1 text-sm text-gray-900">{profile.careerYears}년</dd>
-                        </div>
-
-                        {/* 이력서 업로드/교체 UI */}
-                        <div className="sm:col-span-2 space-y-2">
-                          <dt className="text-sm font-medium text-gray-500">이력서</dt>
-                          {profile.resumeUrl ? (
-                            <dd className="mt-1 text-sm">
-                              <a
-                                href={profile.resumeUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 underline"
-                              >
-                                업로드된 이력서 보기 (PDF)
-                              </a>
-                            </dd>
-                          ) : (
-                            <dd className="mt-1 text-sm text-gray-400">업로드된 이력서가 없습니다.</dd>
-                          )}
-                          <input
-                            type="file"
-                            accept="application/pdf"
-                            onChange={handleFileChange}
-                          />
-                          <Button
-                            onClick={handleUpload}
-                            disabled={isUploading || !selectedFile}
-                          >
-                            {isUploading ? '업로드 중...' : profile.resumeUrl ? '이력서 교체' : '이력서 업로드'}
-                          </Button>
-                        </div>
-                      </dl>
-                      <div className="mt-6">
-                        <Button variant="outline" onClick={() => setIsEditing(true)}>
-                          프로필 수정
-                        </Button>
-                      </div>
-                    </>
+          <div className="pt-6 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">업로드된 이력서</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  {uploadedResumeUrl ? (
+                    <a
+                      href={uploadedResumeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline"
+                    >
+                      업로드된 이력서(PDF) 보기
+                    </a>
                   ) : (
-                    <form onSubmit={handleProfileUpdate} className="space-y-4">
-                      <Input
-                        label="이름"
-                        type="text"
-                        value={profile.name}
-                        onChange={(e) => setProfile(prev => ({ ...prev, name: e.target.value }))}
-                        required
-                      />
-                      <Input
-                        label="이메일"
-                        type="email"
-                        value={profile.email}
-                        onChange={(e) => setProfile(prev => ({ ...prev, email: e.target.value }))}
-                        required
-                      />
-                      <Input
-                        label="직무"
-                        type="text"
-                        value={profile.position}
-                        onChange={(e) => setProfile(prev => ({ ...prev, position: e.target.value }))}
-                        required
-                      />
-                      <Input
-                        label="회사"
-                        type="text"
-                        value={profile.company}
-                        onChange={(e) => setProfile(prev => ({ ...prev, company: e.target.value }))}
-                        required
-                      />
-                      <Input
-                        label="경력"
-                        type="number"
-                        value={profile.careerYears}
-                        onChange={(e) => setProfile(prev => ({ ...prev, careerYears: Number(e.target.value) }))}
-                        min="0"
-                        required
-                      />
-                      <div className="flex space-x-4">
-                        <Button type="submit" className="flex-1">저장</Button>
-                        <Button type="button" variant="outline" className="flex-1" onClick={() => setIsEditing(false)}>
-                          취소
-                        </Button>
-                      </div>
-                    </form>
+                    resume ? resume.name : '업로드된 이력서가 없습니다'
                   )}
-                </div>
+                </p>
               </div>
+              {(resume || uploadedResumeUrl) && (
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="md"
+                  onClick={handleDelete}
+                >
+                  삭제
+                </Button>
+              )}
             </div>
-          )}
+          </div>
+        </div>
 
-          {activeTab === 'history' && (
-            <div className="p-8">
-              <div className="space-y-6">
-                {interviewHistory.map(interview => (
-                  <div key={interview.id} className="bg-gray-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-medium text-gray-900">{interview.position}</h3>
-                        <p className="text-sm text-gray-500">
-                          {new Date(interview.date).toLocaleDateString('ko-KR')} · {interview.duration}분
-                        </p>
-                      </div>
-                      <span className={`text-lg font-semibold ${getScoreColor(interview.score)}`}>{interview.score}점</span>
-                    </div>
-                    <div className="flex justify-end space-x-4">
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/interview/feedback/${interview.id}`)}>
-                        피드백 보기
-                      </Button>
-                      <Button size="sm" onClick={() => navigate('/interview/setting')}>
-                        다시 도전하기
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        <div className="mt-8 space-y-6 bg-white shadow-sm rounded-lg p-6 border border-gray-200">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">AI 면접 준비</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              이력서를 업로드하면 AI가 분석하여 맞춤형 면접 질문을 생성합니다
+            </p>
+            <div className="mt-4">
+              <Button
+                type="button"
+                variant="primary"
+                size="lg"
+                className="w-full"
+                disabled={!uploadedResumeUrl}
+              >
+                AI 면접 시작하기
+              </Button>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

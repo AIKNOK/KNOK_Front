@@ -9,7 +9,7 @@ import { EnvironmentCheck } from './components/pages/interview/EnvironmentCheck'
 import { InterviewSession } from './components/pages/interview/InterviewSession';
 import { FeedbackReport } from './components/pages/interview/FeedbackReport';
 import { Library } from './components/pages/Library';
-import { MyPage } from './pages/MyPage';
+import { MyPage } from './components/pages/MyPage';
 
 function App() {
   return (
