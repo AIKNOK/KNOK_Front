@@ -1,15 +1,46 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '../shared/Button';
+
 
 export const MyPage: React.FC = () => {
   const [resume, setResume] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedResumeUrl, setUploadedResumeUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
+  
   // 토큰을 항상 id_token → access_token 순서로 가져옴 (id_token이 없으면 access_token 사용)
   const getToken = () =>
     localStorage.getItem('id_token') || localStorage.getItem('access_token');
+
+  // ✅ useEffect는 그 다음에 위치
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+
+    const fetchResume = async () => {
+      try {
+        const response = await fetch('/api/resume/', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.file_url) {
+            setUploadedResumeUrl(data.file_url);
+          }
+        } else {
+          console.warn('업로드된 이력서 없음');
+        }
+      } catch (error) {
+        console.error('이력서 조회 실패:', error);
+      }
+    };
+
+    fetchResume();
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -146,19 +177,24 @@ export const MyPage: React.FC = () => {
               <div>
                 <h3 className="text-lg font-medium text-gray-900">업로드된 이력서</h3>
                 <p className="mt-1 text-sm text-gray-600">
-                  {uploadedResumeUrl ? (
-                    <a
-                      href={uploadedResumeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 underline"
-                    >
-                      업로드된 이력서(PDF) 보기
-                    </a>
-                  ) : (
-                    resume ? resume.name : '업로드된 이력서가 없습니다'
-                  )}
-                </p>
+  {uploadedResumeUrl ? (
+    <>
+      <a
+        href={uploadedResumeUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 underline"
+      >
+        업로드된 이력서 보기
+      </a>
+      <span className="ml-2 text-gray-400">
+        ({uploadedResumeUrl.split('/').pop()})
+      </span>
+      </>
+        ) : (
+          resume ? resume.name : '업로드된 이력서가 없습니다'
+            )}
+        </p>
               </div>
               {(resume || uploadedResumeUrl) && (
                 <Button
