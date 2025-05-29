@@ -1,6 +1,5 @@
-import React from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
+// src/components/interview/CTASection.tsx
+import { Link } from 'react-router-dom';
 
 export default function CTASection() {
   return (
@@ -14,7 +13,7 @@ export default function CTASection() {
               Ready for your project
             </h2>
             <Link
-              href="/contact"
+              to="/contact"
               className="inline-flex items-center px-12 py-4 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-2xl"
             >
               Get in touch
@@ -25,29 +24,43 @@ export default function CTASection() {
         {/* 로고와 네비게이션 */}
         <div className="grid md:grid-cols-2 gap-8 mb-16">
           <div className="flex items-center">
-            <div className="relative w-[94px] h-[238px] mr-8">
-              <Image
+            <div className="w-[94px] h-[238px] mr-8">
+              <img
                 src="/images/logo-vertical.png"
                 alt="Waves vertical logo"
-                fill
-                className="object-contain"
+                className="object-contain w-full h-full"
               />
             </div>
-            <div className="relative w-[266px] h-[93px]">
-              <Image
+            <div className="w-[266px] h-[93px]">
+              <img
                 src="/images/logo-horizontal.png"
                 alt="Waves horizontal logo"
-                fill
-                className="object-contain"
+                className="object-contain w-full h-full"
               />
             </div>
           </div>
           <nav className="flex justify-end items-center">
             <ul className="flex gap-8 text-2xl text-white">
-              <li><Link href="/" className="hover:text-primary transition-colors">Home</Link></li>
-              <li><Link href="/about" className="hover:text-primary transition-colors">About us</Link></li>
-              <li><Link href="/blog" className="hover:text-primary transition-colors">Blog</Link></li>
-              <li><Link href="/services" className="hover:text-primary transition-colors">Services</Link></li>
+              <li>
+                <Link to="/" className="hover:text-primary transition-colors">
+                  Home
+                </Link>
+              </li>
+              <li>
+                <Link to="/about" className="hover:text-primary transition-colors">
+                  About us
+                </Link>
+              </li>
+              <li>
+                <Link to="/blog" className="hover:text-primary transition-colors">
+                  Blog
+                </Link>
+              </li>
+              <li>
+                <Link to="/services" className="hover:text-primary transition-colors">
+                  Services
+                </Link>
+              </li>
             </ul>
           </nav>
         </div>
@@ -58,9 +71,13 @@ export default function CTASection() {
         {/* 푸터 정보 */}
         <div className="flex flex-wrap justify-between items-center text-white">
           <div className="text-base">
-            <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+            <Link to="/privacy" className="hover:text-primary transition-colors">
+              Privacy Policy
+            </Link>
             <span className="mx-2">|</span>
-            <Link href="/terms" className="hover:text-primary transition-colors">Terms of Use</Link>
+            <Link to="/terms" className="hover:text-primary transition-colors">
+              Terms of Use
+            </Link>
           </div>
           <div className="flex gap-6">
             <a href="#" className="hover:text-primary transition-colors">
@@ -97,4 +114,4 @@ export default function CTASection() {
       </div>
     </section>
   );
-} 
+}
