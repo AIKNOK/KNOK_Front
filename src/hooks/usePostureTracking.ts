@@ -1,11 +1,19 @@
-// src/hooks/usePostureTracking.ts
 import { useEffect, useRef } from 'react';
 import { Pose } from '@mediapipe/pose';
-import { FaceMesh, NormalizedLandmark, NormalizedLandmarkList } from '@mediapipe/face_mesh';
+import { FaceMesh, NormalizedLandmark } from '@mediapipe/face_mesh';
 
 export function usePostureTracking(videoRef: React.RefObject<HTMLVideoElement>) {
-  const badPostureCountRef = useRef(0);
-  let startBadTime: number | null = null;
+  const shoulderTiltCountRef = useRef(0);
+  const headDownCountRef = useRef(0);
+  const earTiltCountRef = useRef(0);
+  const gazeOffCountRef = useRef(0);
+
+  const badStartTimesRef = useRef({
+    shoulder: null as number | null,
+    head: null as number | null,
+    ear: null as number | null,
+    gaze: null as number | null,
+  });
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -32,10 +40,8 @@ export function usePostureTracking(videoRef: React.RefObject<HTMLVideoElement>) 
       minTrackingConfidence: 0.5,
     });
 
-    // 👇 얼굴 랜드마크를 저장할 변수 (정확한 타입 명시)
     let latestFaceLandmarks: NormalizedLandmark[] | null = null;
 
-    // 얼굴 결과 받기
     faceMesh.onResults((results) => {
       if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         latestFaceLandmarks = results.multiFaceLandmarks[0];
@@ -44,7 +50,6 @@ export function usePostureTracking(videoRef: React.RefObject<HTMLVideoElement>) 
       }
     });
 
-    // 자세 결과 받기
     pose.onResults((results) => {
       const poseLandmarks = results.poseLandmarks;
       if (!poseLandmarks) return;
@@ -55,25 +60,22 @@ export function usePostureTracking(videoRef: React.RefObject<HTMLVideoElement>) 
       const lEar = poseLandmarks[7];
       const rEar = poseLandmarks[8];
 
-      // 어깨 기울기
       const dx = lShoulder.x - rShoulder.x;
       const dy = lShoulder.y - rShoulder.y;
       const shoulderAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+      const shoulderBad = Math.abs(shoulderAngle) > 10;
 
-      // 고개 숙임
       const avgShoulderY = (lShoulder.y + rShoulder.y) / 2;
       const headDown = nose.y > avgShoulderY + 0.1;
 
-      // 귀 기울기
       const earAngle = Math.atan2(lEar.y - rEar.y, lEar.x - rEar.x) * (180 / Math.PI);
+      const earTilt = Math.abs(earAngle) > 10;
 
-      // 시선 흐트러짐 판단
       let gazeOff = false;
       if (latestFaceLandmarks) {
         const leftIris = latestFaceLandmarks[468];
         const leftEyeLeft = latestFaceLandmarks[33];
         const leftEyeRight = latestFaceLandmarks[133];
-
         const eyeRange = leftEyeRight.x - leftEyeLeft.x;
         const irisPos = eyeRange > 0
           ? (leftIris.x - leftEyeLeft.x) / eyeRange
@@ -84,26 +86,32 @@ export function usePostureTracking(videoRef: React.RefObject<HTMLVideoElement>) 
         }
       }
 
-      const isBad =
-        Math.abs(shoulderAngle) > 10 ||
-        Math.abs(earAngle) > 10 ||
-        headDown ||
-        gazeOff;
+      const now = Date.now();
 
-      if (isBad) {
-        if (!startBadTime) {
-          startBadTime = Date.now();
-        } else if (Date.now() - startBadTime > 3000) {
-          badPostureCountRef.current++;
-          console.warn('⚠️ 자세 나쁨 count 증가 →', badPostureCountRef.current);
-          startBadTime = null;
+      const checkBadPosture = (
+        type: keyof typeof badStartTimesRef.current,
+        isBad: boolean,
+        countRef: React.MutableRefObject<number>
+      ) => {
+        if (isBad) {
+          if (!badStartTimesRef.current[type]) {
+            badStartTimesRef.current[type] = now;
+          } else if (now - (badStartTimesRef.current[type] ?? 0) > 3000) {
+            countRef.current++;
+            console.warn(`⚠️ ${type} 나쁨 count 증가 →`, countRef.current);
+            badStartTimesRef.current[type] = null;
+          }
+        } else {
+          badStartTimesRef.current[type] = null;
         }
-      } else {
-        startBadTime = null;
-      }
+      };
+
+      checkBadPosture('shoulder', shoulderBad, shoulderTiltCountRef);
+      checkBadPosture('head', headDown, headDownCountRef);
+      checkBadPosture('ear', earTilt, earTiltCountRef);
+      checkBadPosture('gaze', gazeOff, gazeOffCountRef);
     });
 
-    // 3초마다 분석
     const analyze = async () => {
       const video = videoRef.current;
       if (!video) return;
@@ -126,5 +134,10 @@ export function usePostureTracking(videoRef: React.RefObject<HTMLVideoElement>) 
     };
   }, [videoRef]);
 
-  return badPostureCountRef;
+  return {
+    shoulderTiltCountRef, // 어깨 기울기
+    headDownCountRef,  // 고개 숙임
+    earTiltCountRef,  // 귀 기울기
+    gazeOffCountRef,  //  시선
+  };
 }
