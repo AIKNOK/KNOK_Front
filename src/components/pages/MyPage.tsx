@@ -1,7 +1,5 @@
-// src/pages/MyPage.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '../shared/Button';
 
 export const MyPage: React.FC = () => {
   const navigate = useNavigate();
@@ -89,7 +87,6 @@ export const MyPage: React.FC = () => {
     }
   };
 
-  // ★ 수정된 부분: 환경 점검 경로를 check-environment 로 변경
   const handleStartInterview = () => {
     if (uploadedResumeUrl) {
       navigate('/interview/check-environment');
@@ -99,7 +96,6 @@ export const MyPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
-        {/* 헤더 */}
         <div className="text-center mb-6">
           <h2 className="text-3xl font-normal text-gray-900">마이 페이지</h2>
           <p className="mt-2 text-sm text-gray-600">
@@ -107,9 +103,7 @@ export const MyPage: React.FC = () => {
           </p>
         </div>
 
-        {/* 이력서 업로드 섹션 */}
         <div className="space-y-6 bg-white shadow-sm rounded-lg p-6 border border-gray-200">
-          {/* 파일 선택 & 업로드 */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
               이력서 업로드
@@ -120,13 +114,7 @@ export const MyPage: React.FC = () => {
                 type="file"
                 accept=".pdf,.doc,.docx"
                 onChange={handleFileChange}
-                className="block w-full text-sm text-gray-500
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-md file:border-0
-                  file:text-sm file:font-medium
-                  file:bg-primary file:text-white
-                  hover:file:cursor-pointer hover:file:bg-primary/90
-                  hover:file:text-white"
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:cursor-pointer hover:file:bg-primary/90 hover:file:text-white"
               />
               <Button
                 type="button"
@@ -144,7 +132,6 @@ export const MyPage: React.FC = () => {
             </p>
           </div>
 
-          {/* 업로드된 이력서 보기 & 삭제 */}
           <div className="pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between">
               <div>
@@ -183,7 +170,6 @@ export const MyPage: React.FC = () => {
           </div>
         </div>
 
-        {/* AI 면접 준비 섹션 */}
         <div className="mt-8 bg-white shadow-sm rounded-lg p-6 border border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">AI 면접 준비</h3>
           <p className="mt-2 text-sm text-gray-600">
@@ -206,3 +192,4 @@ export const MyPage: React.FC = () => {
     </div>
   );
 };
+
