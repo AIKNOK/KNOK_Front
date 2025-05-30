@@ -1,4 +1,3 @@
-// src/components/pages/interview/InterviewSession.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../shared/Button';
@@ -12,17 +11,13 @@ interface Question {
 
 export const InterviewSession: React.FC = () => {
   const navigate = useNavigate();
-
-  // 비디오 feed 참조
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // 면접 진행 상태
   const [isInterviewActive, setIsInterviewActive] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const totalTime = 30 * 60; // 30분
+  const totalTime = 30 * 60;
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // 질문 상태
   const [currentQuestion, setCurrentQuestion] = useState<Question>({
     id: '1',
     text: '자신이 참여했던 프로젝트 중 가장 도전적이었던 경험에 대해 설명해주세요.',
@@ -36,10 +31,8 @@ export const InterviewSession: React.FC = () => {
     difficulty: 'medium',
   });
 
-  // 실시간 분석용 인터벌
   const analysisIntervalRef = useRef<number | null>(null);
 
-  // 카메라/마이크 스트림 설정
   useEffect(() => {
     async function startCamera() {
       try {
@@ -54,20 +47,16 @@ export const InterviewSession: React.FC = () => {
     startCamera();
 
     return () => {
-      // 언마운트 시 스트림 종료
       const stream = videoRef.current?.srcObject as MediaStream | null;
       stream?.getTracks().forEach(track => track.stop());
-      // 분석 인터벌 정리
       if (analysisIntervalRef.current) {
         clearInterval(analysisIntervalRef.current);
       }
     };
   }, [navigate]);
 
-  // 면접 시작 시 타이머 및 실시간 분석 시작
   useEffect(() => {
     if (isInterviewActive) {
-      // 타이머
       const timerId = window.setInterval(() => {
         setCurrentTime(prev => {
           if (prev >= totalTime) {
@@ -78,7 +67,6 @@ export const InterviewSession: React.FC = () => {
         });
       }, 1000);
 
-      // 프레임 캡처 & 분석 API 호출 (3초 간격)
       analysisIntervalRef.current = window.setInterval(() => {
         const video = videoRef.current;
         if (!video) return;
@@ -119,7 +107,6 @@ export const InterviewSession: React.FC = () => {
   const handleNextQuestion = () => {
     if (nextQuestion) {
       setCurrentQuestion(nextQuestion);
-      // TODO: AI로부터 다음 질문 받기
       setNextQuestion(null);
     }
   };
@@ -148,10 +135,9 @@ export const InterviewSession: React.FC = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-gray-900 text-white">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="relative min-h-screen bg-gray-900 text-white pt-[92px] pb-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* 비디오 영역 */}
           <div className="md:col-span-2">
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
               <video
@@ -170,7 +156,6 @@ export const InterviewSession: React.FC = () => {
             </div>
           </div>
 
-          {/* 질문 & 제어 */}
           <div className="space-y-6">
             {!isInterviewActive ? (
               <div className="bg-gray-800 p-6 rounded-lg">
@@ -181,7 +166,7 @@ export const InterviewSession: React.FC = () => {
                 </Button>
               </div>
             ) : (
-              <>               
+              <>
                 <div className="bg-gray-800 p-6 rounded-lg">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium">현재 질문</h3>
@@ -216,16 +201,15 @@ export const InterviewSession: React.FC = () => {
         </div>
       </div>
 
-      {/* 피드백 생성 모달 */}
       {isGenerating && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 text-center space-y-4 max-w-xs mx-4">
             <h3 className="text-xl font-semibold text-gray-900">면접이 종료되었습니다.</h3>
             <p className="text-gray-600">피드백을 생성 중입니다...</p>
             <div className="mt-4">
-              <svg className="mx-auto w-12 h-12 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">  
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+              <svg className="mx-auto w-12 h-12 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
             </div>
             <p className="text-gray-500 text-sm">(잠시만 기다려주세요)</p>
