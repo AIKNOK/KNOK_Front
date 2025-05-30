@@ -56,18 +56,26 @@ export const Login: React.FC = () => {
       }
 
       const data = await response.json();
-      if (data.access_token) localStorage.setItem("access_token", data.access_token);
-      if (data.id_token) localStorage.setItem("id_token", data.id_token);
 
-      if (!data.id_token) {
-        alert("id_token이 응답에 포함되어 있지 않습니다.");
+      // ✅ 모든 토큰을 동일한 "token" 키로 저장
+      if (data.access_token) {
+        localStorage.setItem("access_token", data.access_token);
+        localStorage.setItem("token", data.access_token); // 추가
+      }
+      if (data.id_token) {
+        localStorage.setItem("id_token", data.id_token);
+        localStorage.setItem("token", data.id_token); // 추가
+      }
+
+      if (!data.id_token && !data.access_token) {
+        alert("로그인 응답에 토큰이 포함되어 있지 않습니다.");
         setIsLoading(false);
         return;
       }
 
-      console.log("로그인 성공! id_token:", data.id_token);
-      window.dispatchEvent(new Event("storageChange"));
-      navigate("/mypage");
+      console.log("로그인 성공! token:", data.id_token || data.access_token);
+      window.dispatchEvent(new Event("storageChange")); // ✅ Header 갱신 트리거
+      navigate("/"); // ✅ 홈페이지로 이동
     } catch (err) {
       setErrors((prev) => ({ ...prev, email: "서버와의 통신에 실패했습니다" }));
     } finally {

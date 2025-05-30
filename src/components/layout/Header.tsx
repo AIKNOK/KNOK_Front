@@ -27,20 +27,12 @@ const Header: React.FC = () => {
     window.dispatchEvent(new Event("storageChange"));
   };
 
-  const hideOn = [
-    "/mypage",
-    "/interview/check-environment",
-    "/interview/session",
-    "/interview/feedback",
-  ];
-  if (hideOn.includes(pathname)) return null;
-
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-[92px]">
           <Link to="/" className="flex items-center space-x-2">
-            <img src="/images/logo.png" alt="KNOK Logo" className="h-12 w-auto" />
+            <img src="/logo.png" alt="KNOK Logo" className="h-12 w-auto" />
             <span className="text-[32px] font-semibold text-primary tracking-tighter">
               KNOK
             </span>
