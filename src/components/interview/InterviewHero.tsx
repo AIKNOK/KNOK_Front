@@ -1,5 +1,4 @@
-import React from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { ArrowRightIcon } from '@heroicons/react/24/outline';
 import { PlayCircleIcon } from '@heroicons/react/24/solid';
 
@@ -16,7 +15,7 @@ export default function InterviewHero() {
             </h1>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
               <Link
-                href="/interview/start"
+                to="/interview/start"
                 className="inline-flex items-center px-8 py-4 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
               >
                 <span className="mr-2">Interview Start</span>
@@ -34,4 +33,4 @@ export default function InterviewHero() {
       </div>
     </section>
   );
-} 
+}

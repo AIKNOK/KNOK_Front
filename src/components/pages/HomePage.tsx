@@ -9,7 +9,8 @@ export const HomePage: React.FC = () => {
       <nav className="fixed top-0 left-0 right-0 bg-white z-50">
         <div className="container mx-auto px-4 h-[92px] flex items-center justify-between">
           <h1 className="pl-4 text-[#8447e9] text-3xl font-semibold tracking-tighter">
-            <Link to="/">KONK</Link>
+            <Link to="/">KNOK</Link>
+
           </h1>
           <div className="flex items-center space-x-12">
             <Link to="/" className="text-[#8447e9] font-medium">
@@ -87,7 +88,7 @@ export const HomePage: React.FC = () => {
             OUR SERVICES
           </p>
           <h2 className="text-[#000000] text-4xl font-medium tracking-tighter leading-[1.2] max-w-[1128px] mb-16">
-            KONK delivers
+            KNOK delivers
             <br />
             personalized AI-powered interview solutions
             <br />
@@ -295,7 +296,7 @@ export const HomePage: React.FC = () => {
             <div className="flex flex-col items-start">
               <img src="/-20250521-092255removebgpreview-1@2x.png" alt="Logo" className="h-[80px] mb-4" />
               <h2 className="text-[#8447e9] text-2xl font-bold tracking-widest">
-                KNOCK
+                KNOK
               </h2>
               <p className="text-[#bdb0ec] text-sm font-semibold tracking-widest mt-1">
                 SINCE 2025
@@ -364,3 +365,4 @@ export const HomePage: React.FC = () => {
     </div>
   );
 };
+

@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { Header } from './components/layout/Header';
+import Header from './components/layout/Header';
 import { HomePage } from './components/pages/HomePage';
 import { Login } from './components/pages/Login';
 import { Register } from './pages/Register';
@@ -10,6 +10,7 @@ import { InterviewSession } from './components/pages/interview/InterviewSession'
 import { FeedbackReport } from './components/pages/interview/FeedbackReport';
 import { Library } from './components/pages/Library';
 import { MyPage } from './components/pages/MyPage';
+import AboutUs from './components/pages/AboutUs';
 
 function App() {
   return (

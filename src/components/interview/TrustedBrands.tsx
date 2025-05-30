@@ -1,5 +1,5 @@
+// src/components/interview/TrustedBrands.tsx
 import React from 'react';
-import Image from 'next/image';
 
 const LOGOS = [
   '/logos/logo1.svg',
@@ -25,18 +25,16 @@ export default function TrustedBrands() {
               key={index}
               className="flex items-center justify-center p-6 border border-[#a1aebf] rounded-lg"
             >
-              <div className="relative w-[150px] h-[40px]">
-                <Image
-                  src={logo}
-                  alt={`Partner logo ${index + 1}`}
-                  fill
-                  className="object-contain"
-                />
-              </div>
+              {/* Next.js 이미지 대신 표준 img 태그 사용 및 Tailwind 크기 지정 */}
+              <img
+                src={logo}
+                alt={`Partner logo ${index + 1}`}
+                className="object-contain w-[150px] h-[40px]"
+              />
             </div>
           ))}
         </div>
       </div>
     </section>
   );
-} 
+}

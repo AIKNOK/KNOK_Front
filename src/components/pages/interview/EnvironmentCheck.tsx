@@ -1,3 +1,4 @@
+// src/components/pages/interview/EnvironmentCheck.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../shared/Button';
@@ -26,12 +27,6 @@ export const EnvironmentCheck: React.FC = () => {
       status: 'pending',
     },
     {
-      id: 'network',
-      title: '네트워크 상태',
-      description: '인터넷 연결 상태를 확인합니다.',
-      status: 'pending',
-    },
-    {
       id: 'browser',
       title: '브라우저 호환성',
       description: '현재 브라우저가 지원되는지 확인합니다.',
@@ -45,91 +40,84 @@ export const EnvironmentCheck: React.FC = () => {
     const checkEnvironment = async () => {
       // 카메라 체크
       try {
-        setCheckItems(prev => prev.map(item =>
-          item.id === 'camera' ? { ...item, status: 'checking' } : item
-        ));
+        setCheckItems(prev =>
+          prev.map(item =>
+            item.id === 'camera' ? { ...item, status: 'checking' } : item
+          )
+        );
         await navigator.mediaDevices.getUserMedia({ video: true });
-        setCheckItems(prev => prev.map(item =>
-          item.id === 'camera' ? { ...item, status: 'success' } : item
-        ));
-      } catch (error) {
-        setCheckItems(prev => prev.map(item =>
-          item.id === 'camera' ? { ...item, status: 'error', errorMessage: '카메라를 찾을 수 없습니다.' } : item
-        ));
+        setCheckItems(prev =>
+          prev.map(item =>
+            item.id === 'camera' ? { ...item, status: 'success' } : item
+          )
+        );
+      } catch {
+        setCheckItems(prev =>
+          prev.map(item =>
+            item.id === 'camera'
+              ? { ...item, status: 'error', errorMessage: '카메라를 찾을 수 없습니다.' }
+              : item
+          )
+        );
       }
 
       // 마이크 체크
       try {
-        setCheckItems(prev => prev.map(item =>
-          item.id === 'microphone' ? { ...item, status: 'checking' } : item
-        ));
+        setCheckItems(prev =>
+          prev.map(item =>
+            item.id === 'microphone' ? { ...item, status: 'checking' } : item
+          )
+        );
         await navigator.mediaDevices.getUserMedia({ audio: true });
-        setCheckItems(prev => prev.map(item =>
-          item.id === 'microphone' ? { ...item, status: 'success' } : item
-        ));
-      } catch (error) {
-        setCheckItems(prev => prev.map(item =>
-          item.id === 'microphone' ? { ...item, status: 'error', errorMessage: '마이크를 찾을 수 없습니다.' } : item
-        ));
-      }
-
-      // 네트워크 체크
-      try {
-        setCheckItems(prev => prev.map(item =>
-          item.id === 'network' ? { ...item, status: 'checking' } : item
-        ));
-        const response = await fetch('https://www.google.com/favicon.ico');
-        if (response.ok) {
-          setCheckItems(prev => prev.map(item =>
-            item.id === 'network' ? { ...item, status: 'success' } : item
-          ));
-        } else {
-          throw new Error('Network check failed');
-        }
-      } catch (error) {
-        setCheckItems(prev => prev.map(item =>
-          item.id === 'network' ? { ...item, status: 'error', errorMessage: '네트워크 연결을 확인해주세요.' } : item
-        ));
+        setCheckItems(prev =>
+          prev.map(item =>
+            item.id === 'microphone' ? { ...item, status: 'success' } : item
+          )
+        );
+      } catch {
+        setCheckItems(prev =>
+          prev.map(item =>
+            item.id === 'microphone'
+              ? { ...item, status: 'error', errorMessage: '마이크를 찾을 수 없습니다.' }
+              : item
+          )
+        );
       }
 
       // 브라우저 체크
-      const isChrome = navigator.userAgent.indexOf('Chrome') > -1;
-      setCheckItems(prev => prev.map(item =>
-        item.id === 'browser' ? {
-          ...item,
-          status: isChrome ? 'success' : 'error',
-          errorMessage: isChrome ? undefined : 'Chrome 브라우저를 사용해주세요.'
-        } : item
-      ));
+      const isChrome = navigator.userAgent.includes('Chrome');
+      setCheckItems(prev =>
+        prev.map(item =>
+          item.id === 'browser'
+            ? {
+                ...item,
+                status: isChrome ? 'success' : 'error',
+                errorMessage: isChrome ? undefined : 'Chrome 브라우저를 사용해주세요.'
+              }
+            : item
+        )
+      );
     };
 
     checkEnvironment();
   }, []);
 
   useEffect(() => {
-    const allSuccess = checkItems.every(item => item.status === 'success');
-    setIsAllChecked(allSuccess);
+    setIsAllChecked(checkItems.every(item => item.status === 'success'));
   }, [checkItems]);
 
   const getStatusIcon = (status: CheckItem['status']) => {
     switch (status) {
-      case 'pending':
-        return '⏳';
-      case 'checking':
-        return '🔄';
-      case 'success':
-        return '✅';
-      case 'error':
-        return '❌';
-      default:
-        return '⏳';
+      case 'pending':   return '⏳';
+      case 'checking':  return '🔄';
+      case 'success':   return '✅';
+      case 'error':     return '❌';
+      default:          return '⏳';
     }
   };
 
   const handleStart = () => {
-    if (isAllChecked) {
-      navigate('/interview/session');
-    }
+    if (isAllChecked) navigate('/interview/session');
   };
 
   return (
@@ -144,61 +132,45 @@ export const EnvironmentCheck: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-white shadow rounded-lg">
-          <div className="divide-y divide-gray-200">
-            {checkItems.map((item) => (
-              <div key={item.id} className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <span className="text-2xl mr-4">
-                      {getStatusIcon(item.status)}
-                    </span>
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">
-                        {item.title}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {item.description}
-                      </p>
-                      {item.status === 'error' && item.errorMessage && (
-                        <p className="mt-1 text-sm text-red-600">
-                          {item.errorMessage}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="ml-4">
-                    {item.status === 'error' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.reload()}
-                      >
-                        다시 시도
-                      </Button>
+        <div className="bg-white shadow rounded-lg divide-y divide-gray-200">
+          {checkItems.map(item => (
+            <div key={item.id} className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <span className="text-2xl mr-4">
+                    {getStatusIcon(item.status)}
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900">{item.title}</h3>
+                    <p className="text-sm text-gray-500">{item.description}</p>
+                    {item.status === 'error' && item.errorMessage && (
+                      <p className="mt-1 text-sm text-red-600">{item.errorMessage}</p>
                     )}
                   </div>
                 </div>
+                {item.status === 'error' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.location.reload()}
+                  >
+                    다시 시도
+                  </Button>
+                )}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
 
         <div className="mt-8 flex justify-end space-x-4">
-          <Button
-            variant="outline"
-            onClick={() => navigate(-1)}
-          >
+          <Button variant="outline" onClick={() => navigate(-1)}>
             이전으로
           </Button>
-          <Button
-            onClick={handleStart}
-            disabled={!isAllChecked}
-          >
+          <Button onClick={handleStart} disabled={!isAllChecked}>
             면접 시작하기
           </Button>
         </div>
       </div>
     </div>
   );
-}; 
+};

@@ -1,91 +1,61 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Button } from '../shared/Button';
-
+import { useNavigate } from 'react-router-dom';
 
 export const MyPage: React.FC = () => {
+  const navigate = useNavigate();
+
   const [resume, setResume] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedResumeUrl, setUploadedResumeUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // 토큰을 항상 id_token → access_token 순서로 가져옴 (id_token이 없으면 access_token 사용)
+
   const getToken = () =>
     localStorage.getItem('id_token') || localStorage.getItem('access_token');
 
-  // ✅ useEffect는 그 다음에 위치
   useEffect(() => {
     const token = getToken();
     if (!token) return;
 
-    const fetchResume = async () => {
+    (async () => {
       try {
         const response = await fetch('/api/resume/', {
           method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          headers: { 'Authorization': `Bearer ${token}` },
         });
-
         if (response.ok) {
           const data = await response.json();
-          if (data.file_url) {
-            setUploadedResumeUrl(data.file_url);
-          }
-        } else {
-          console.warn('업로드된 이력서 없음');
+          if (data.file_url) setUploadedResumeUrl(data.file_url);
         }
       } catch (error) {
         console.error('이력서 조회 실패:', error);
       }
-    };
-
-    fetchResume();
+    })();
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setResume(e.target.files[0]);
-    }
+    if (e.target.files?.[0]) setResume(e.target.files[0]);
   };
 
   const handleUpload = async () => {
     if (!resume) return;
-
-    const formData = new FormData();
-    formData.append('resume', resume);
-
     const token = getToken();
-    if (!token) {
-      alert('로그인이 필요합니다.');
-      return;
-    }
+    if (!token) return alert('로그인이 필요합니다.');
 
     setIsUploading(true);
     try {
+      const formData = new FormData();
+      formData.append('resume', resume);
+
       const response = await fetch('/api/resume/upload/', {
         method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
       });
-
-      console.log('[업로드 응답]', response.status, response);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[업로드 에러응답]', errorText);
-        throw new Error('이력서 업로드에 실패했습니다.');
-      }
+      if (!response.ok) throw new Error('이력서 업로드 실패');
 
       const data = await response.json();
-      if (data.file_url) {
-        setUploadedResumeUrl(data.file_url);
-        alert('이력서가 성공적으로 업로드되었습니다.');
-      } else {
-        alert('이력서가 성공적으로 업로드되었습니다.');
-      }
-
+      setUploadedResumeUrl(data.file_url || null);
+      alert('이력서가 성공적으로 업로드되었습니다.');
       setResume(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (error) {
@@ -98,24 +68,14 @@ export const MyPage: React.FC = () => {
 
   const handleDelete = async () => {
     const token = getToken();
-    if (!token) {
-      alert('로그인이 필요합니다.');
-      return;
-    }
+    if (!token) return alert('로그인이 필요합니다.');
 
     try {
       const response = await fetch('/api/resume/delete/', {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[삭제 에러응답]', errorText);
-        throw new Error('이력서 삭제에 실패했습니다.');
-      }
+      if (!response.ok) throw new Error('이력서 삭제 실패');
 
       alert('이력서가 성공적으로 삭제되었습니다.');
       setResume(null);
@@ -127,17 +87,23 @@ export const MyPage: React.FC = () => {
     }
   };
 
+  const handleStartInterview = () => {
+    if (uploadedResumeUrl) {
+      navigate('/interview/check-environment');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
-        <div className="text-center">
+        <div className="text-center mb-6">
           <h2 className="text-3xl font-normal text-gray-900">마이 페이지</h2>
           <p className="mt-2 text-sm text-gray-600">
             이력서를 업로드하고 AI 면접을 준비하세요
           </p>
         </div>
 
-        <div className="mt-8 space-y-6 bg-white shadow-sm rounded-lg p-6 border border-gray-200">
+        <div className="space-y-6 bg-white shadow-sm rounded-lg p-6 border border-gray-200">
           <div>
             <label className="block text-sm font-medium text-gray-700">
               이력서 업로드
@@ -148,13 +114,7 @@ export const MyPage: React.FC = () => {
                 type="file"
                 accept=".pdf,.doc,.docx"
                 onChange={handleFileChange}
-                className="block w-full text-sm text-gray-500
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-md file:border-0
-                  file:text-sm file:font-medium
-                  file:bg-primary file:text-white
-                  hover:file:cursor-pointer hover:file:bg-primary/90
-                  hover:file:text-white"
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:cursor-pointer hover:file:bg-primary/90 hover:file:text-white"
               />
               <Button
                 type="button"
@@ -168,7 +128,7 @@ export const MyPage: React.FC = () => {
               </Button>
             </div>
             <p className="mt-2 text-sm text-gray-500">
-              PDF, DOC, DOCX 파일 형식을 지원합니다
+              PDF, DOC, DOCX 형식을 지원합니다
             </p>
           </div>
 
@@ -177,24 +137,24 @@ export const MyPage: React.FC = () => {
               <div>
                 <h3 className="text-lg font-medium text-gray-900">업로드된 이력서</h3>
                 <p className="mt-1 text-sm text-gray-600">
-  {uploadedResumeUrl ? (
-    <>
-      <a
-        href={uploadedResumeUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-blue-600 underline"
-      >
-        업로드된 이력서 보기
-      </a>
-      <span className="ml-2 text-gray-400">
-        ({uploadedResumeUrl.split('/').pop()})
-      </span>
-      </>
-        ) : (
-          resume ? resume.name : '업로드된 이력서가 없습니다'
-            )}
-        </p>
+                  {uploadedResumeUrl ? (
+                    <>
+                      <a
+                        href={uploadedResumeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        보기
+                      </a>
+                      <span className="ml-2 text-gray-400">
+                        ({uploadedResumeUrl.split('/').pop()})
+                      </span>
+                    </>
+                  ) : (
+                    '업로드된 이력서가 없습니다'
+                  )}
+                </p>
               </div>
               {(resume || uploadedResumeUrl) && (
                 <Button
@@ -210,26 +170,26 @@ export const MyPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-8 space-y-6 bg-white shadow-sm rounded-lg p-6 border border-gray-200">
-          <div>
-            <h3 className="text-lg font-medium text-gray-900">AI 면접 준비</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              이력서를 업로드하면 AI가 분석하여 맞춤형 면접 질문을 생성합니다
-            </p>
-            <div className="mt-4">
-              <Button
-                type="button"
-                variant="primary"
-                size="lg"
-                className="w-full"
-                disabled={!uploadedResumeUrl}
-              >
-                AI 면접 시작하기
-              </Button>
-            </div>
+        <div className="mt-8 bg-white shadow-sm rounded-lg p-6 border border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">AI 면접 준비</h3>
+          <p className="mt-2 text-sm text-gray-600">
+            이력서를 업로드하면 AI가 분석하여 맞춤형 면접 질문을 생성합니다
+          </p>
+          <div className="mt-4">
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              className="w-full"
+              onClick={handleStartInterview}
+              disabled={!uploadedResumeUrl}
+            >
+              AI 면접 시작하기
+            </Button>
           </div>
         </div>
       </div>
     </div>
   );
 };
+

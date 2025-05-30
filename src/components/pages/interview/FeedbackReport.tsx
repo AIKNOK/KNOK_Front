@@ -173,7 +173,7 @@ export const FeedbackReport: React.FC = () => {
             학습 자료 보기
           </Button>
           <Button
-            onClick={() => navigate('/interview/setting')}
+            onClick={() => navigate('/MyPage')}
           >
             다시 도전하기
           </Button>
