@@ -1,39 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 
 const navItems = [
-  { name: 'Home', path: '/' },
-  { name: 'About us', path: '/about' },
-  { name: 'Interview', path: '/interview' },
-  { name: 'Library', path: '/library' },
+  { name: "Home", path: "/" },
+  { name: "About us", path: "/about" },
+  { name: "Interview", path: "/interview" },
+  { name: "Library", path: "/library" },
 ];
 
-export const Header: React.FC = () => {
+const Header: React.FC = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(localStorage.getItem("token"));
 
   useEffect(() => {
-    const onStorageChange = () => setToken(localStorage.getItem('token'));
-    window.addEventListener('storageChange', onStorageChange);
-    return () => window.removeEventListener('storageChange', onStorageChange);
+    const onStorageChange = () => setToken(localStorage.getItem("token"));
+    window.addEventListener("storageChange", onStorageChange);
+    return () => window.removeEventListener("storageChange", onStorageChange);
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem("token");
     setToken(null);
-    navigate('/login');
-    window.dispatchEvent(new Event('storageChange'));
+    navigate("/login");
+    window.dispatchEvent(new Event("storageChange"));
   };
 
-  // Hide Header on specific routes
   const hideOn = [
-    '/login',                     // 로그인 페이지에서 숨김
-    '/mypage',                    // 마이페이지(이력서 업로드)에서 숨김
-    '/interview/check-environment',
-    '/interview/session',
-    '/interview/feedback',
+    "/mypage",
+    "/interview/check-environment",
+    "/interview/session",
+    "/interview/feedback",
   ];
   if (hideOn.includes(pathname)) return null;
 
@@ -41,7 +39,6 @@ export const Header: React.FC = () => {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-[92px]">
-          {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
             <img src="/images/logo.png" alt="KNOK Logo" className="h-12 w-auto" />
             <span className="text-[32px] font-semibold text-primary tracking-tighter">
@@ -49,16 +46,15 @@ export const Header: React.FC = () => {
             </span>
           </Link>
 
-          {/* Navigation Links */}
           <div className="hidden md:flex items-center space-x-10">
-            {navItems.map(item => (
+            {navItems.map((item) => (
               <Link
                 key={item.name}
                 to={item.path}
                 className={
                   pathname === item.path
-                    ? 'text-primary font-medium'
-                    : 'text-gray-900 font-medium hover:text-primary transition-colors'
+                    ? "text-primary font-medium"
+                    : "text-gray-900 font-medium hover:text-primary transition-colors"
                 }
               >
                 {item.name}
@@ -66,7 +62,6 @@ export const Header: React.FC = () => {
             ))}
           </div>
 
-          {/* Auth Buttons */}
           <div className="flex items-center space-x-4">
             {!token ? (
               <>
@@ -113,3 +108,5 @@ export const Header: React.FC = () => {
     </nav>
   );
 };
+
+export default Header;
