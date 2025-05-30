@@ -1,6 +1,8 @@
+// src/components/pages/interview/InterviewSession.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../shared/Button';
+import { usePostureTracking } from '../../../../hooks/usePostureTracking';
 
 interface Question {
   id: string;
@@ -12,6 +14,7 @@ interface Question {
 export const InterviewSession: React.FC = () => {
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const badPostureCountRef = usePostureTracking(videoRef);
 
   const [isInterviewActive, setIsInterviewActive] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -24,6 +27,7 @@ export const InterviewSession: React.FC = () => {
     type: 'behavioral',
     difficulty: 'medium',
   });
+
   const [nextQuestion, setNextQuestion] = useState<Question | null>({
     id: '2',
     text: 'React의 가상 DOM(Virtual DOM)에 대해 설명해주세요.',
@@ -31,8 +35,10 @@ export const InterviewSession: React.FC = () => {
     difficulty: 'medium',
   });
 
+  const timerRef = useRef<number | null>(null);
   const analysisIntervalRef = useRef<number | null>(null);
 
+  // 카메라 시작
   useEffect(() => {
     async function startCamera() {
       try {
@@ -49,15 +55,16 @@ export const InterviewSession: React.FC = () => {
     return () => {
       const stream = videoRef.current?.srcObject as MediaStream | null;
       stream?.getTracks().forEach(track => track.stop());
-      if (analysisIntervalRef.current) {
-        clearInterval(analysisIntervalRef.current);
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
     };
   }, [navigate]);
 
+  // 인터뷰 중 타이머 및 자세 분석 동시 작동
   useEffect(() => {
     if (isInterviewActive) {
-      const timerId = window.setInterval(() => {
+      // 시간 타이머
+      timerRef.current = window.setInterval(() => {
         setCurrentTime(prev => {
           if (prev >= totalTime) {
             handleEndInterview();
@@ -67,29 +74,37 @@ export const InterviewSession: React.FC = () => {
         });
       }, 1000);
 
+      // 자세 분석 주기
       analysisIntervalRef.current = window.setInterval(() => {
         const video = videoRef.current;
         if (!video) return;
+
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
         ctx.drawImage(video, 0, 0);
+
         canvas.toBlob(async blob => {
           if (!blob) return;
           const form = new FormData();
           form.append('frame', blob, 'frame.jpg');
+
           try {
-            await fetch('/api/interview/analyze', { method: 'POST', body: form });
+            await fetch('/api/interview/analyze', {
+              method: 'POST',
+              body: form,
+            });
           } catch (e) {
-            console.error('분석 API 오류', e);
+            console.error('자세 분석 실패', e);
           }
         }, 'image/jpeg');
       }, 3000);
 
       return () => {
-        clearInterval(timerId);
+        if (timerRef.current) clearInterval(timerRef.current);
+        if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
       };
     }
   }, [isInterviewActive]);
@@ -113,30 +128,36 @@ export const InterviewSession: React.FC = () => {
 
   const handleEndInterview = async () => {
     setIsInterviewActive(false);
-    if (analysisIntervalRef.current) {
-      clearInterval(analysisIntervalRef.current);
-    }
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
 
     setIsGenerating(true);
     try {
+      await fetch('/api/posture/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: badPostureCountRef.current }),
+      });
+
       const res = await fetch('/api/interview/feedback/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: 'CURRENT_SESSION_ID' }),
       });
+
       if (!res.ok) throw new Error('피드백 생성 실패');
       const { feedbackId } = await res.json();
       navigate(`/interview/feedback/${feedbackId}`);
     } catch (e) {
       console.error(e);
-      alert('피드백 생성 중 오류가 발생했습니다.');
+      alert('면접 종료 처리 중 오류 발생');
       setIsGenerating(false);
     }
   };
 
   return (
-    <div className="relative min-h-screen bg-gray-900 text-white pt-[92px] pb-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="pt-[92px] relative min-h-screen bg-gray-900 text-white">
+      <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="md:col-span-2">
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
