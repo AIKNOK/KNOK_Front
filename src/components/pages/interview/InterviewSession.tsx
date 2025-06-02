@@ -11,7 +11,7 @@ interface Question {
   difficulty: 'easy' | 'medium' | 'hard';
 }
 
-// 환경변수
+// 환경변수 (Vite .env 파일에서 반드시 VITE_ 접두사가 있어야 합니다)
 const WS_URL = import.meta.env.VITE_WS_URL;                 // ex: ws://localhost:8001/ws/transcribe
 const API_BASE = import.meta.env.VITE_API_BASE_URL;         // ex: http://localhost:8000/api
 const MAX_ANSWER_DURATION = 90;                             // 초 단위
@@ -109,8 +109,10 @@ export const InterviewSession: React.FC = () => {
    * (3) 면접 시작 → 질문 생성 호출
    */
   const onStart = async () => {
-    console.log('▶︎ API_BASE_URL:', API_BASE);
-    console.log('▶︎ WS_URL:', WS_URL);
+    // ① Vite 환경변수가 제대로 로드되었는지 확인
+    console.log('▶︎ [DEBUG] import.meta.env →', import.meta.env);
+    console.log('▶︎ [DEBUG] API_BASE_URL:', API_BASE);
+    console.log('▶︎ [DEBUG] WS_URL:', WS_URL);
 
     const token = localStorage.getItem('id_token') || localStorage.getItem('access_token');
     if (!token) {
@@ -122,7 +124,7 @@ export const InterviewSession: React.FC = () => {
     try {
       // 실제 백엔드에 매핑된 엔드포인트: "/api/generate-resume-questions/"
       const url = `${API_BASE}/generate-resume-questions/`;
-      console.log('▶︎ fetch questions from →', url);
+      console.log('▶︎ [DEBUG] generate-resume-questions 요청 URL →', url);
 
       const res = await fetch(url, {
         method: 'POST',
@@ -131,15 +133,19 @@ export const InterviewSession: React.FC = () => {
           'Content-Type': 'application/json',
         },
       });
-      console.log('▶︎ generate-resume-questions status:', res.status);
+      console.log('▶︎ [DEBUG] fetch 응답 상태(status):', res.status);
 
       if (!res.ok) {
-        console.error('▶︎ Error response:', await res.text());
+        // 에러 바디를 찍고 예외를 던집니다.
+        const errorText = await res.text();
+        console.error('▶︎ [DEBUG] Error response body:', errorText);
         throw new Error(`Status ${res.status}`);
       }
 
       // 백엔드에서 반환한 questions: [{ id, text }, ...]
       const { questions: qs }: { questions: { id: string; text: string }[] } = await res.json();
+      console.log('▶︎ [DEBUG] questions payload:', qs);
+
       const mapped = qs.map(({ id, text }) => ({
         id,
         text,
@@ -154,8 +160,8 @@ export const InterviewSession: React.FC = () => {
       // 첫 질문부터 바로 답변 녹음·전사 시작
       startAnswerForQuestion(0);
     } catch (err) {
-      console.error(err);
-      alert('질문 생성에 실패했습니다.');
+      console.error('[ERROR] 질문 생성 중 예외 발생 →', err);
+      alert('질문 생성에 실패했습니다. 콘솔을 확인해 주세요.');
     } finally {
       setIsLoading(false);
     }
@@ -205,20 +211,18 @@ export const InterviewSession: React.FC = () => {
       // 서버로부터 JSON { transcript: "..." } 형태로 응답
       const data = JSON.parse(event.data as string);
       const { transcript: t } = data;
-      // 텍스트를 화면에 표시하지 않으려면 아래 줄을 주석 처리해도 됩니다.
-      // setTranscript((prev) => prev + t + ' ');
       setTranscript((prev) => prev + t + ' ');
     };
 
     websocketRef.current.onerror = (err) => {
-      console.error('WebSocket error:', err);
+      console.error('▶︎ [DEBUG] WebSocket error:', err);
     };
 
     // ② 90초 제한 타이머
     recordTimerRef.current = window.setInterval(() => {
       setRecordTime((prev) => {
         if (prev + 1 >= MAX_ANSWER_DURATION) {
-          onNext(); // 자동으로 다음 질문으로
+          onNext(); // 자동으로 다음 질문
           return prev;
         }
         return prev + 1;
@@ -263,26 +267,27 @@ export const InterviewSession: React.FC = () => {
     // Blob으로 저장된 audio 데이터를 하나로 합쳐서 WebM 오디오 파일 생성
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
 
-    // FormData에 담아서 백엔드로 전송(“upload” 엔드포인트)
+    // FormData에 담아서 백엔드로 전송(“/resume/upload/” 엔드포인트)
     const form = new FormData();
     form.append('audio', audioBlob, `question_${questionId}.webm`);
     form.append('transcript', answerText);
 
     const token = localStorage.getItem('id_token') || localStorage.getItem('access_token');
     if (!token) {
-      console.error('No auth token');
+      console.error('▶︎ [DEBUG] No auth token');
       return;
     }
     try {
-      await fetch(`${API_BASE}/upload/`, {
+      await fetch(`${API_BASE}/resume/upload/`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
         },
         body: form,
       });
+      console.log('▶︎ [DEBUG] audio & transcript 업로드 성공 → questionId:', questionId);
     } catch (e) {
-      console.error('Upload failed:', e);
+      console.error('▶︎ [DEBUG] Upload failed:', e);
     }
 
     // 상태 초기화
@@ -326,6 +331,7 @@ export const InterviewSession: React.FC = () => {
 
     try {
       // 자세 정보 전송
+      console.log('▶︎ [DEBUG] POST /posture/ →', badPostureCountRef.current);
       await fetch(`${API_BASE}/posture/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -333,18 +339,23 @@ export const InterviewSession: React.FC = () => {
       });
 
       // 피드백 생성 API 호출
+      console.log('▶︎ [DEBUG] POST /interview/feedback/generate/ → sessionId: CURRENT_SESSION_ID');
       const res = await fetch(`${API_BASE}/interview/feedback/generate/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: 'CURRENT_SESSION_ID' }),
       });
-      if (!res.ok) throw new Error('Feedback 생성 실패');
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('▶︎ [DEBUG] Feedback 생성 실패, 응답 바디:', text);
+        throw new Error('Feedback 생성 실패');
+      }
       const { feedbackId } = await res.json();
       // 피드백 페이지로 이동
       navigate(`/interview/feedback/${feedbackId}`);
     } catch (err) {
-      console.error(err);
-      alert('면접 종료 중 오류가 발생했습니다.');
+      console.error('[ERROR] 면접 종료 중 예외 발생 →', err);
+      alert('면접 종료 중 오류가 발생했습니다. 콘솔을 확인해 주세요.');
     } finally {
       setIsLoading(false);
     }
