@@ -11,6 +11,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.821.0",
+    "@aws-sdk/client-transcribe-streaming": "^3.821.0",
     "@headlessui/react": "^2.2.4",
     "@heroicons/react": "^2.2.0",
     "@mediapipe/camera_utils": "^0.3.1675466862",
@@ -24,6 +26,7 @@
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "axios": "^1.9.0",
+    "buffer": "^6.0.3",
     "clsx": "^2.1.1",
     "framer-motion": "^12.14.0",
     "react": "^18.2.0",
@@ -35,6 +38,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss7-compat": "^2.2.17",
+    "@types/node": "^22.15.29",
     "@typescript-eslint/eslint-plugin": "^7.1.1",
     "@typescript-eslint/parser": "^7.1.1",
     "@vitejs/plugin-react": "^4.2.1",
