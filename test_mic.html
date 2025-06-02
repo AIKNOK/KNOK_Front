@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Microphone Test</title>
+</head>
+<body>
+  <h1>🎤 Microphone Test</h1>
+  <video id="video" width="320" height="240" autoplay muted></video>
+  <p id="status">상태: 대기 중</p>
+
+  <script>
+    const videoEl = document.getElementById("video");
+    const statusEl = document.getElementById("status");
+
+    async function testMic() {
+      statusEl.textContent = "상태: getUserMedia 호출…";
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: true,
+        });
+        statusEl.textContent = "상태: getUserMedia 성공! 🎉";
+        videoEl.srcObject = stream;
+
+        // AudioContext + 간단히 level 체크
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        source.connect(analyser);
+        analyser.fftSize = 256;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        function draw() {
+          analyser.getByteFrequencyData(dataArray);
+          const sum = dataArray.reduce((a, b) => a + b, 0);
+          const avg = sum / dataArray.length;
+          // 0~255 사이, 수치가 올라간다는 건 음성 신호가 들어온다는 뜻
+          console.log("▶︎ [DEBUG] 마이크 레벨 평균값:", avg);
+          requestAnimationFrame(draw);
+        }
+        draw();
+      } catch (err) {
+        statusEl.textContent = "상태: getUserMedia 실패 😢";
+        console.error("▶︎ [ERROR] testMic getUserMedia 실패:", err);
+      }
+    }
+
+    testMic();
+  </script>
+</body>
+</html>
