@@ -1,3 +1,5 @@
+// src/components/pages/interview/EnvironmentCheck.tsx
+
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../shared/Button';
@@ -11,99 +13,139 @@ export const EnvironmentCheck: React.FC = () => {
   const micStreamRef = useRef<MediaStream | null>(null);
 
   const [videoConnected, setVideoConnected] = useState(false);
-  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedMicId, setSelectedMicId] = useState<string>('');
   const [micConnected, setMicConnected] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
+  const [testAudioURL, setTestAudioURL] = useState<string>(""); // 녹음된 오디오를 재생할 URL
 
-  // 초기: 카메라 연결 및 마이크 권한/디바이스 조회
+  // 페이지 로드 시: 카메라 + 마이크 자동 연결 및 볼륨 게이지
   useEffect(() => {
-    const initCamera = async () => {
+    const startCameraAndMic = async () => {
+      // (1) 카메라 연결
       try {
         const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) videoRef.current.srcObject = camStream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = camStream;
+        }
         setVideoConnected(true);
       } catch (e) {
         console.error('카메라 연결 실패', e);
         setVideoConnected(false);
       }
-    };
-    const initMicrophones = async () => {
+
+      // (2) 마이크 연결 및 볼륨 시각화
       try {
-        const audioPerm = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const mics = devices.filter(d => d.kind === 'audioinput');
-        setMicDevices(mics);
-        if (mics.length) setSelectedMicId(mics[0].deviceId);
-        audioPerm.getTracks().forEach(t => t.stop());
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = audioStream;
+        setMicConnected(true);
+
+        const context = new AudioContext();
+        audioContextRef.current = context;
+        const source = context.createMediaStreamSource(audioStream);
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const draw = () => {
+          if (!analyserRef.current) return;
+          analyserRef.current.getByteFrequencyData(dataArray);
+          const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+          const percent = Math.min(100, (avg / 255) * 100);
+          setMicLevel(percent);
+          requestAnimationFrame(draw);
+        };
+        draw();
       } catch (e) {
-        console.error('오디오 권한/디바이스 조회 실패', e);
+        console.error('마이크 연결 실패', e);
+        setMicConnected(false);
       }
     };
-    initCamera();
-    initMicrophones();
-  }, []);
 
-  // 마이크 연결 및 볼륨 게이지
-  const startMicVisualization = async (deviceId: string) => {
+    startCameraAndMic();
+
+    // 언마운트 시 리소스 해제
+    return () => {
+      if (videoRef.current?.srcObject) {
+        (videoRef.current.srcObject as MediaStream)
+          .getTracks()
+          .forEach(track => track.stop());
+      }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+      // 녹음 테스트로 생성된 URL이 있다면 메모리 해제
+      if (testAudioURL) {
+        URL.revokeObjectURL(testAudioURL);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 최초 1회 실행
+
+  // 3초간 녹음 후 오디오를 페이지 내에서 재생
+  const handleMicTest = async () => {
+    if (!micConnected || !micStreamRef.current) {
+      alert('마이크가 연결되지 않았습니다.');
+      return;
+    }
+
     try {
-      micStreamRef.current?.getTracks().forEach(t => t.stop());
-      audioContextRef.current?.close();
+      // 이미 연결된 micStreamRef.current를 이용해 MediaRecorder 생성
+      const recorder = new MediaRecorder(micStreamRef.current);
+      const chunks: Blob[] = [];
 
-      const audioStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } });
-      micStreamRef.current = audioStream;
-      const context = new AudioContext();
-      audioContextRef.current = context;
-      const source = context.createMediaStreamSource(audioStream);
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyserRef.current = analyser;
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const draw = () => {
-        if (!analyserRef.current) return;
-        analyserRef.current.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
-        const percent = Math.min(100, (avg / 255) * 100);
-        setMicLevel(percent);
-        requestAnimationFrame(draw);
+      recorder.ondataavailable = (e) => {
+        chunks.push(e.data);
       };
-      draw();
-      setMicConnected(true);
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        setTestAudioURL((prevUrl) => {
+          // 이전 URL이 있으면 메모리 해제
+          if (prevUrl) {
+            URL.revokeObjectURL(prevUrl);
+          }
+          return url;
+        });
+      };
+
+      recorder.start();
+      setTimeout(() => {
+        recorder.stop();
+      }, 3000);
     } catch (e) {
-      console.error('마이크 연결/시각화 실패', e);
-      setMicConnected(false);
+      console.error('마이크 녹음 테스트 실패', e);
+      alert('마이크 녹음 테스트 중 오류가 발생했습니다.');
     }
   };
-
-  const handleMicConnect = () => {
-    if (selectedMicId) {
-      startMicVisualization(selectedMicId);
-    }
-  };
-
-  const handleStart = () => {
-    if (videoConnected && micConnected) {
-      navigate('/interview/session');
-    }
-  };
-
-  const currentMicLabel = micDevices.find(m => m.deviceId === selectedMicId)?.label || '';
 
   return (
     <div className="min-h-screen bg-gray-50 pt-[132px] pb-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-12">
-          <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">환경 점검</h1>
-          <p className="mt-3 text-lg text-gray-500">카메라 및 마이크를 선택하고 연결을 확인하세요.</p>
+          <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
+            환경 점검
+          </h1>
+          <p className="mt-3 text-lg text-gray-500">
+            카메라와 마이크가 정상적으로 동작하는지 확인하세요.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white shadow rounded-lg p-6">
           {/* 카메라 */}
           <div>
             <div className="aspect-video bg-black rounded-md overflow-hidden">
-              <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
             </div>
             <p className="mt-4 text-sm text-gray-600">
               {videoConnected ? '카메라 연결됨' : '카메라 연결 실패'}
@@ -112,49 +154,59 @@ export const EnvironmentCheck: React.FC = () => {
 
           {/* 마이크 */}
           <div>
-            <label htmlFor="micSelect" className="block text-sm font-medium text-gray-700">마이크 선택</label>
-            <select
-              id="micSelect"
-              value={selectedMicId}
-              onChange={e => setSelectedMicId(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary/50"
-            >
-              {micDevices.map(m => (
-                <option key={m.deviceId} value={m.deviceId}>{m.label || '알 수 없는 마이크'}</option>
-              ))}
-            </select>
-
-            <div className="mt-4 flex items-center gap-2">
-              <Button onClick={handleMicConnect}>연결 확인</Button>
-              {micConnected && (
-                <>
-                  <span className="text-green-600 font-semibold">✔ 연결 완료</span>
-                  <span className="ml-2 text-sm text-gray-700">{currentMicLabel}</span>
-                </>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-sm font-medium text-gray-700">마이크 상태</span>
+              {micConnected ? (
+                <span className="text-green-600 font-semibold">✔ 연결됨</span>
+              ) : (
+                <span className="text-red-600 font-semibold">✖ 미연결</span>
               )}
             </div>
 
             {micConnected && (
-              <div className="mt-4">
+              <div className="mb-4">
                 <div className="h-3 w-full bg-gray-200 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-green-500"
                     style={{ width: `${micLevel}%` }}
                   />
                 </div>
+                <div className="text-xs mt-2 text-gray-500">마이크 볼륨 게이지</div>
               </div>
             )}
 
-            <ul className="mt-4 text-sm text-gray-600 list-disc list-inside">
-              <li>소음이 적은 환경에서 진행하세요.</li>
-              <li>마이크 음량을 확인하세요.</li>
+            <Button onClick={handleMicTest} className="mt-2">
+              3초간 마이크 녹음 테스트
+            </Button>
+
+            {testAudioURL && (
+              <div className="mt-4">
+                <audio controls src={testAudioURL} className="w-full">
+                  브라우저가 오디오 재생을 지원하지 않습니다.
+                </audio>
+                <div className="text-xs mt-1 text-gray-500">
+                  녹음된 오디오를 재생 중입니다.
+                </div>
+              </div>
+            )}
+
+            <ul className="mt-5 text-sm text-gray-600 list-disc list-inside">
+              <li>녹음된 오디오가 나오는지 확인하세요.</li>
+              <li>녹음된 소리가 없다면 브라우저/OS 설정 및 장치 연결을 확인하세요.</li>
             </ul>
           </div>
         </div>
 
         <div className="mt-8 flex justify-end space-x-4">
-          <Button variant="outline" onClick={() => navigate(-1)}>이전으로</Button>
-          <Button onClick={handleStart} disabled={!(videoConnected && micConnected)}>AI 면접 시작하기</Button>
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            이전으로
+          </Button>
+          <Button
+            onClick={() => navigate('/interview/session')}
+            disabled={!(videoConnected && micConnected)}
+          >
+            AI 면접 시작하기
+          </Button>
         </div>
       </div>
     </div>
