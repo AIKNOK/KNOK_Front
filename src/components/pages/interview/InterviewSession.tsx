@@ -218,10 +218,10 @@ export const InterviewSession: React.FC = () => {
 
     // AudioProcessingEvent 타입으로 정확히 선언
     processor.onaudioprocess = (e: AudioProcessingEvent) => {
-      console.log(
+      /*console.log(
         "▶ onaudioprocess 이벤트 발생, 버퍼 길이:",
         e.inputBuffer.getChannelData(0).length
-      );
+      );*/
       const floatData = new Float32Array(e.inputBuffer.getChannelData(0));
       audioChunksRef.current.push(floatData);
     };
@@ -277,7 +277,7 @@ export const InterviewSession: React.FC = () => {
     const token =
       localStorage.getItem("id_token") || localStorage.getItem("access_token");
     try {
-      const uploadRes = await fetch(`${API_BASE}/upload/`, {
+      const uploadRes = await fetch(`${API_BASE}/audio/upload/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
