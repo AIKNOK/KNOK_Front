@@ -1,3 +1,5 @@
+// src/pages/HomePage.tsx
+
 import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/shared/Button";
@@ -5,20 +7,24 @@ import { Button } from "../components/shared/Button";
 export const HomePage: React.FC = () => {
   return (
     <div className="min-h-screen bg-white pt-[92px]">
-      {/* ✅ 기존 Navigation Bar 제거됨 */}
-      {/* ✅ 상단 여백 pt-[92px]은 유지 (Header 고정 높이 만큼) */}
-
       {/* Hero Section */}
       <section className="bg-[#e1dbf6] h-[383px] flex items-center">
         <div className="container mx-auto px-4">
           <p className="text-[#8447e9] text-base font-semibold tracking-wider mb-8">
             OUR SERVICES
           </p>
-          <h2 className="text-[#0f0f0f] text-4xl font-medium tracking-tighter leading-[1.2] max-w-[780px]">
+          <h2 className="text-[#0f0f0f] text-4xl font-medium tracking-tighter leading-[1.2] max-w-[780px] mb-6">
             똑똑..
             <br />
             당신의 취업문을 두드리는 "노크"
           </h2>
+
+          {/* Hero 바로 아래의 AI 모의면접 시작하기 버튼 */}
+          <Link to="/interview/upload-resume">
+            <Button variant="primary" size="lg" className="text-base px-6 py-3">
+              AI 모의면접 시작하기
+            </Button>
+          </Link>
         </div>
       </section>
 
@@ -44,13 +50,6 @@ export const HomePage: React.FC = () => {
                 className="w-full h-full object-cover"
               />
             </div>
-          </div>
-          <div className="flex justify-center mt-16">
-            <Link to="/interview">
-              <Button variant="primary" size="lg" className="text-base">
-                AI 모의면접 시작하기
-              </Button>
-            </Link>
           </div>
         </div>
       </section>
@@ -189,11 +188,68 @@ export const HomePage: React.FC = () => {
             News & Insights
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* 카드들 생략 없이 유지 */}
+            {/* 예시 카드 1 */}
+            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+              <img
+                src="/news1.jpg"
+                alt="News 1"
+                className="w-full h-48 object-cover"
+              />
+              <div className="p-6">
+                <h3 className="text-xl font-semibold mb-2">News Title 1</h3>
+                <p className="text-gray-600 text-sm mb-4">
+                  짧은 요약 텍스트가 여기에 들어갑니다...
+                </p>
+                <Link to="/news/1">
+                  <span className="text-[#8447e9] font-medium hover:underline">
+                    Read more →
+                  </span>
+                </Link>
+              </div>
+            </div>
+            {/* 예시 카드 2 */}
+            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+              <img
+                src="/news2.jpg"
+                alt="News 2"
+                className="w-full h-48 object-cover"
+              />
+              <div className="p-6">
+                <h3 className="text-xl font-semibold mb-2">News Title 2</h3>
+                <p className="text-gray-600 text-sm mb-4">
+                  짧은 요약 텍스트가 여기에 들어갑니다...
+                </p>
+                <Link to="/news/2">
+                  <span className="text-[#8447e9] font-medium hover:underline">
+                    Read more →
+                  </span>
+                </Link>
+              </div>
+            </div>
+            {/* 예시 카드 3 */}
+            <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+              <img
+                src="/news3.jpg"
+                alt="News 3"
+                className="w-full h-48 object-cover"
+              />
+              <div className="p-6">
+                <h3 className="text-xl font-semibold mb-2">News Title 3</h3>
+                <p className="text-gray-600 text-sm mb-4">
+                  짧은 요약 텍스트가 여기에 들어갑니다...
+                </p>
+                <Link to="/news/3">
+                  <span className="text-[#8447e9] font-medium hover:underline">
+                    Read more →
+                  </span>
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
+      {/* Explore All News 버튼 */}
       <div className="mt-12 pl-4">
         <Button variant="outline" size="md">
           Explore all news →
@@ -228,7 +284,11 @@ export const HomePage: React.FC = () => {
           <div className="flex flex-col md:flex-row justify-between items-start mb-24">
             {/* 왼쪽: 로고 + 텍스트 */}
             <div className="flex flex-col items-start">
-              <img src="/-20250521-092255removebgpreview-1@2x.png" alt="Logo" className="h-[80px] mb-4" />
+              <img
+                src="/-20250521-092255removebgpreview-1@2x.png"
+                alt="Logo"
+                className="h-[80px] mb-4"
+              />
               <h2 className="text-[#8447e9] text-2xl font-bold tracking-widest">
                 KNOCK
               </h2>
@@ -239,44 +299,40 @@ export const HomePage: React.FC = () => {
 
             {/* 가운데: 메뉴 */}
             <div className="flex flex-col md:flex-row gap-6 mt-12 md:mt-0 md:ml-16">
-              <a href="/" className="hover:text-[#8447e9]">
+              <Link to="/" className="hover:text-[#8447e9]">
                 Home
-              </a>
-              <a href="/about" className="hover:text-[#8447e9]">
+              </Link>
+              <Link to="/about" className="hover:text-[#8447e9]">
                 About us
-              </a>
-              <a href="/interview" className="hover:text-[#8447e9]">
+              </Link>
+              <Link to="/interview/upload-resume" className="hover:text-[#8447e9]">
                 Interview
-              </a>
-              <a href="/library" className="hover:text-[#8447e9]">
+              </Link>
+              <Link to="/library" className="hover:text-[#8447e9]">
                 Library
-              </a>
+              </Link>
             </div>
 
-            {/* 오른쪽: 아이콘 */}
+            {/* 오른쪽: 소셜 아이콘 */}
             <div className="flex gap-4 mt-12 md:mt-0">
-              <a href="#">
+              <a href="#" aria-label="Facebook">
                 <img
                   src="/-20250521-092255removebgpreview-11@2x.png"
                   alt="Facebook"
                   className="w-[20px]"
                 />
               </a>
-              <a href="#">
-                <img
-                  src="/icon-twitter.svg"
-                  alt="Twitter"
-                  className="w-[20px]"
-                />
+              <a href="#" aria-label="Twitter">
+                <img src="/icon-twitter.svg" alt="Twitter" className="w-[20px]" />
               </a>
-              <a href="#">
+              <a href="#" aria-label="Instagram">
                 <img
                   src="/icon-instagram.svg"
                   alt="Instagram"
                   className="w-[20px]"
                 />
               </a>
-              <a href="#">
+              <a href="#" aria-label="LinkedIn">
                 <img
                   src="/icon-linkedin.svg"
                   alt="LinkedIn"
@@ -286,7 +342,7 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
 
-          {/* 선 */}
+          {/* 하단 구분선 */}
           <hr className="border-t border-[#bdb0ec] mb-6" />
 
           {/* 하단 텍스트 */}
@@ -299,3 +355,5 @@ export const HomePage: React.FC = () => {
     </div>
   );
 };
+
+export default HomePage;
