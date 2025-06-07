@@ -7,7 +7,7 @@ import { Register } from './pages/Register';
 import { InterviewSetting } from './components/pages/interview/InterviewSetting';
 import { EnvironmentCheck } from './components/pages/interview/EnvironmentCheck';
 import { InterviewSession } from './components/pages/interview/InterviewSession';
-import { FeedbackReport } from './components/pages/interview/FeedbackReport';
+import FeedbackReport from './components/pages/interview/FeedbackReport';
 import { Library } from './components/pages/Library';
 import { MyPage } from './components/pages/MyPage';
 import AboutUs from './components/pages/AboutUs';
