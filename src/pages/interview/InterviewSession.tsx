@@ -14,7 +14,9 @@ interface Question {
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const MAX_ANSWER_DURATION = 90; // 초
 
+
 export const InterviewSession: React.FC = () => {
+  const [resumeText, setResumeText] = useState("");
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -154,10 +156,31 @@ export const InterviewSession: React.FC = () => {
       setQuestions(mapped);
       setQIdx(0);
       setIsInterviewActive(true);
-      // → 이제 useEffect에서 녹음이 자동으로 시작된다.
     } catch (err) {
-      console.error("질문 생성 실패:", err);
+      console.error("❌ 질문 생성 실패:", err);
       alert("질문 생성 실패");
+      setIsLoading(false);
+      return; // 질문 없으면 더 진행 안 함
+    }
+      // → 이제 useEffect에서 녹음이 자동으로 시작된다.
+
+      // resume_text도 저장 (미리 백엔드에서 텍스트만 가져오는 API를 만들었어야 함)
+    try {
+      const resumeRes = await fetch(`${API_BASE}/get-resume-text/`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (resumeRes.ok) {
+        const { resume_text } = await resumeRes.json();
+        setResumeText(resume_text || "");
+
+        console.log("📄 resume_text:", resume_text);
+      } else {
+        console.warn("⚠️ 이력서 텍스트 응답 오류:", resumeRes.status);
+      }
+    } catch (err) {
+      console.warn("⚠️ 이력서 텍스트 가져오기 실패:", err);
     } finally {
       setIsLoading(false);
     }
@@ -247,6 +270,7 @@ export const InterviewSession: React.FC = () => {
   const stopRecordingAndUpload = async () => {
     console.log("▶ stopRecordingAndUpload() 호출됨, 현재 질문:", qIdx + 1);
     setIsRecording(false);
+
     if (recordTimerRef.current) {
       clearInterval(recordTimerRef.current);
       console.log("▶ recordTimer cleared");
@@ -288,16 +312,54 @@ export const InterviewSession: React.FC = () => {
       alert("녹음 업로드 실패");
     }
 
-    // 5-4) 다음 질문 또는 면접 종료
-    if (qIdx < questions.length - 1) {
-      console.log("▶ 다음 질문으로 넘어갑니다:", qIdx + 2);
-      setQIdx((prev) => prev + 1);
-      setTranscript(""); // 백엔드가 STT 처리 → 프론트는 비워둠
-      // → useEffect가 qIdx 변화를 감지하여 startRecording()을 다시 호출함
-    } else {
-      console.log("▶ 마지막 질문, 면접 종료 처리");
-      setIsInterviewActive(false);
+    // 5-4) 꼬리 질문 판단 요청
+    const decideFollowup = async (userAnswer: string): Promise<boolean> => {
+      if (!token || !resumeText) return false;
 
+      try {
+        const res = await fetch(`${API_BASE}/followup/check/`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            resume_text: resumeText,
+            user_answer: userAnswer,
+          }),
+        });
+
+        const data = await res.json();
+        console.log("🟢 follow-up 판단 결과:", data);
+
+        if (data.followup && data.generated_question) {
+          setQuestions((prev) => [
+            ...prev.slice(0, qIdx + 1),
+            {
+              id: `${prev.length + 1}`,
+              text: data.generated_question,
+              type: "behavioral",
+              difficulty: "medium",
+            },
+            ...prev.slice(qIdx + 1),
+          ]);
+          return true;
+        }
+      } catch (e) {
+        console.error("followup 요청 실패:", e);
+      }
+      return false;
+    };
+    // 실제 응답으로 바꾸기 전까진 하드코딩된 답변 사용용
+    const dummyAnswer = "옛 어른들께서 하신 말씀 중에 “농업이 살아야 나라가 산다”는 이야기를 들은 적이 있습니다. 저는 농업이 가진 가치와 가능성을 높게 평가합니다. 하지만 디지털 전환의 흐름 속에서 농업은 여전히 소외되는 경우가 있다고 느꼈습니다. 저는 AWS 클라우드 스쿨에서 쌓은 경험과 역량을 바탕으로, 스마트 농업, 클라우드 전환, 정보 보안 강화 등 다양한 IT 분야에서 제 능력을 충분히 발휘할 수 있다고 생각합니다. "
+    await decideFollowup(dummyAnswer); //STT가 연결되면 transcript로 대체체
+
+    // 5-5) 다음 질문으로 이동
+    if (qIdx < questions.length - 1) {
+      setQIdx((prev) => prev + 1);
+      setTranscript(""); // STT 초기화
+    } else {
+      setIsInterviewActive(false);
       // 자세 카운트 전송
       try {
         const postureRes = await fetch(`${API_BASE}/posture/`, {
@@ -314,6 +376,7 @@ export const InterviewSession: React.FC = () => {
       navigate("/interview/feedback");
     }
   };
+
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 6) 수동으로 “다음 질문” 또는 “면접 종료” 버튼 클릭 시
