@@ -106,14 +106,11 @@ export const UploadResume: React.FC = () => {
 
   return (
     <Layout>
-      {/* 
-        min-h-screen: 화면 높이만큼 최소 높이 확보 
-        bg-white: 배경색 흰색 
-        px-4: 좌우 1rem 여백 
-        sm:px-6, lg:px-8: 반응형 여백 
-        **py-12 제거 → 상단 여백 없앰**
+      {/*
+        - 헤더가 fixed 이므로, 이 wrapper를 -mt-[92px]로 당겨 헤더 바로 아래로 배경을 덮고,
+        - pt-[92px]로 내부 콘텐츠는 정상 위치로 밀어냅니다.
       */}
-      <main className="min-h-screen bg-white px-4 sm:px-6 lg:px-8">
+      <div className="-mt-[92px] pt-[92px] bg-white min-h-screen px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto">
           {/* 페이지 제목 부분 */}
           <div className="text-center mb-6">
@@ -224,7 +221,7 @@ export const UploadResume: React.FC = () => {
             </div>
           </div>
         </div>
-      </main>
+      </div>
     </Layout>
   );
 };

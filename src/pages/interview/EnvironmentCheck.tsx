@@ -15,12 +15,10 @@ export const EnvironmentCheck: React.FC = () => {
   const [videoConnected, setVideoConnected] = useState(false);
   const [micConnected, setMicConnected] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
-  const [testAudioURL, setTestAudioURL] = useState<string>(""); // 녹음된 오디오를 재생할 URL
+  const [testAudioURL, setTestAudioURL] = useState<string>("");
 
-  // 페이지 로드 시: 카메라 + 마이크 자동 연결 및 볼륨 게이지
   useEffect(() => {
     const startCameraAndMic = async () => {
-      // (1) 카메라 연결
       try {
         const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
         if (videoRef.current) {
@@ -32,7 +30,6 @@ export const EnvironmentCheck: React.FC = () => {
         setVideoConnected(false);
       }
 
-      // (2) 마이크 연결 및 볼륨 시각화
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         micStreamRef.current = audioStream;
@@ -64,12 +61,9 @@ export const EnvironmentCheck: React.FC = () => {
 
     startCameraAndMic();
 
-    // 언마운트 시 리소스 해제
     return () => {
       if (videoRef.current?.srcObject) {
-        (videoRef.current.srcObject as MediaStream)
-          .getTracks()
-          .forEach(track => track.stop());
+        (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
       }
       if (micStreamRef.current) {
         micStreamRef.current.getTracks().forEach(track => track.stop());
@@ -77,15 +71,13 @@ export const EnvironmentCheck: React.FC = () => {
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
-      // 녹음 테스트로 생성된 URL이 있다면 메모리 해제
       if (testAudioURL) {
         URL.revokeObjectURL(testAudioURL);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 최초 1회 실행
+  }, []);
 
-  // 3초간 녹음 후 오디오를 페이지 내에서 재생
   const handleMicTest = async () => {
     if (!micConnected || !micStreamRef.current) {
       alert('마이크가 연결되지 않았습니다.');
@@ -93,7 +85,6 @@ export const EnvironmentCheck: React.FC = () => {
     }
 
     try {
-      // 이미 연결된 micStreamRef.current를 이용해 MediaRecorder 생성
       const recorder = new MediaRecorder(micStreamRef.current);
       const chunks: Blob[] = [];
 
@@ -105,7 +96,6 @@ export const EnvironmentCheck: React.FC = () => {
         const blob = new Blob(chunks, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
         setTestAudioURL((prevUrl) => {
-          // 이전 URL이 있으면 메모리 해제
           if (prevUrl) {
             URL.revokeObjectURL(prevUrl);
           }
@@ -124,7 +114,7 @@ export const EnvironmentCheck: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-[132px] pb-12 px-4 sm:px-6 lg:px-8">
+    <main className="pb-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-12">
           <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
@@ -136,7 +126,6 @@ export const EnvironmentCheck: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white shadow rounded-lg p-6">
-          {/* 카메라 */}
           <div>
             <div className="aspect-video bg-black rounded-md overflow-hidden">
               <video
@@ -152,7 +141,6 @@ export const EnvironmentCheck: React.FC = () => {
             </p>
           </div>
 
-          {/* 마이크 */}
           <div>
             <div className="flex items-center gap-3 mb-2">
               <span className="text-sm font-medium text-gray-700">마이크 상태</span>
@@ -209,6 +197,6 @@ export const EnvironmentCheck: React.FC = () => {
           </Button>
         </div>
       </div>
-    </div>
+    </main>
   );
 };
