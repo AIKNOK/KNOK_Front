@@ -8,7 +8,7 @@ import Footer from "./components/layout/Footer";
 // pages
 import HomePage from "./pages/HomePage";
 import AboutUs from "./pages/AboutUs";
-import { Library } from "./pages/Library";
+import Library from "./pages/Library";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import Contact from "./pages/Contact";
