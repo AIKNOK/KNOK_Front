@@ -1,7 +1,10 @@
+// src/components/auth/Register.tsx
+
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/shared/Button';
 import { authApi } from '../services/auth';
+import Layout from '../components/layout/Layout';
 
 export const Register: React.FC = () => {
   const navigate = useNavigate();
@@ -11,10 +14,8 @@ export const Register: React.FC = () => {
     password: '',
     confirmPassword: '',
   });
-
   const [verificationStep, setVerificationStep] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
-
   const [errors, setErrors] = useState({
     email: '',
     password: '',
@@ -23,12 +24,7 @@ export const Register: React.FC = () => {
   });
 
   const validateForm = () => {
-    const newErrors = {
-      email: '',
-      password: '',
-      confirmPassword: '',
-      code: '',
-    };
+    const newErrors = { email: '', password: '', confirmPassword: '', code: '' };
     let isValid = true;
 
     if (!formData.email) {
@@ -59,21 +55,19 @@ export const Register: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-
     setIsLoading(true);
+
     try {
       const { confirmPassword, ...registerData } = formData;
       await authApi.register(registerData);
       setVerificationStep(true);
     } catch (error: any) {
       console.error('회원가입 실패:', error);
-      if (error.response?.data?.error) {
-        const errorMessage = error.response.data.error;
-        if (errorMessage.includes('email')) {
-          setErrors(prev => ({ ...prev, email: errorMessage }));
-        } else {
-          alert(errorMessage);
-        }
+      const msg = error.response?.data?.error;
+      if (msg && msg.includes('email')) {
+        setErrors(prev => ({ ...prev, email: msg }));
+      } else if (msg) {
+        alert(msg);
       } else {
         alert('회원가입 중 오류가 발생했습니다. 다시 시도해주세요.');
       }
@@ -88,25 +82,15 @@ export const Register: React.FC = () => {
       setErrors(prev => ({ ...prev, code: '인증 코드를 입력해주세요' }));
       return;
     }
-
     setIsLoading(true);
+
     try {
-      await authApi.confirmEmail({
-        email: formData.email,
-        code: verificationCode,
-      });
-      navigate('/login', {
-        state: {
-          message: '이메일 인증이 완료되었습니다. 로그인해주세요.',
-        },
-      });
+      await authApi.confirmEmail({ email: formData.email, code: verificationCode });
+      navigate('/login', { state: { message: '이메일 인증이 완료되었습니다. 로그인해주세요.' } });
     } catch (error: any) {
       console.error('이메일 인증 실패:', error);
-      if (error.response?.data?.error) {
-        setErrors(prev => ({ ...prev, code: error.response.data.error }));
-      } else {
-        alert('이메일 인증 중 오류가 발생했습니다. 다시 시도해주세요.');
-      }
+      const msg = error.response?.data?.error;
+      setErrors(prev => ({ ...prev, code: msg || '인증 중 오류가 발생했습니다.' }));
     } finally {
       setIsLoading(false);
     }
@@ -114,149 +98,134 @@ export const Register: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name as keyof typeof errors]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: '',
-      }));
+      setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
+  // ─── 인증 단계 ───
   if (verificationStep) {
     return (
-      <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md mx-auto">
-          <div className="text-center">
-            <h2 className="text-3xl font-normal text-gray-900">이메일 인증</h2>
-            <p className="mt-2 text-sm text-gray-600">
+      <Layout noPadding noFooter>
+        <div className="bg-white py-12 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-md mx-auto">
+            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+              이메일 인증
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-600">
               {formData.email}로 전송된 인증 코드를 입력해주세요
             </p>
+
+            <form className="mt-8 space-y-6" onSubmit={handleVerification}>
+              <div>
+                <label htmlFor="code" className="block text-sm font-medium text-gray-700">
+                  인증 코드
+                </label>
+                <input
+                  id="code"
+                  name="code"
+                  type="text"
+                  className="mt-1 block w-full px-4 py-4 border border-gray-200 rounded-lg placeholder-gray-500 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                  placeholder="인증 코드 6자리"
+                  value={verificationCode}
+                  onChange={e => {
+                    setVerificationCode(e.target.value);
+                    if (errors.code) {
+                      setErrors(prev => ({ ...prev, code: '' }));
+                    }
+                  }}
+                />
+                {errors.code && <p className="mt-1 text-sm text-red-600">{errors.code}</p>}
+              </div>
+
+              <Button type="submit" variant="primary" size="lg" className="w-full" isLoading={isLoading}>
+                인증 확인
+              </Button>
+            </form>
           </div>
-
-          <form className="mt-8 space-y-6" onSubmit={handleVerification}>
-            <div>
-              <label htmlFor="code" className="block text-sm font-medium text-gray-700">
-                인증 코드
-              </label>
-              <input
-                id="code"
-                name="code"
-                type="text"
-                required
-                className="mt-1 appearance-none rounded-lg relative block w-full px-4 py-4 border border-[#e8e8e8] placeholder-[#757575] text-gray-900 focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
-                placeholder="인증 코드 6자리"
-                value={verificationCode}
-                onChange={(e) => {
-                  setVerificationCode(e.target.value);
-                  if (errors.code) {
-                    setErrors(prev => ({ ...prev, code: '' }));
-                  }
-                }}
-              />
-              {errors.code && <p className="mt-1 text-sm text-red-600">{errors.code}</p>}
-            </div>
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="w-full"
-              isLoading={isLoading}
-            >
-              인증 확인
-            </Button>
-          </form>
         </div>
-      </div>
+      </Layout>
     );
   }
 
+  // ─── 회원가입 폼 ───
   return (
-    <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md mx-auto">
-        <div className="text-center">
-          <h2 className="text-3xl font-normal text-gray-900">회원가입</h2>
-          <p className="mt-2 text-sm text-gray-600">
+    <Layout noPadding noFooter>
+      <div className="bg-white py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md mx-auto">
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            회원가입
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
             당신의 취업문을 열어주는 서비스 노크입니다
           </p>
-        </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                이메일
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className="mt-1 appearance-none rounded-lg relative block w-full px-4 py-4 border border-[#e8e8e8] placeholder-[#757575] text-gray-900 focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
-                placeholder="example@email.com"
-                value={formData.email}
-                onChange={handleChange}
-              />
-              {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
+          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            <div className="space-y-4">
+              {/* 이메일 */}
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                  이메일
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  className="mt-1 block w-full px-4 py-4 border border-gray-200 rounded-lg placeholder-gray-500 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                  placeholder="example@email.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                />
+                {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
+              </div>
+
+              {/* 비밀번호 */}
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  비밀번호
+                </label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="new-password"
+                  className="mt-1 block w-full px-4 py-4 border border-gray-200 rounded-lg placeholder-gray-500 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={handleChange}
+                />
+                {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
+              </div>
+
+              {/* 비밀번호 확인 */}
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                  비밀번호 확인
+                </label>
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  className="mt-1 block w-full px-4 py-4 border border-gray-200 rounded-lg placeholder-gray-500 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                  placeholder="••••••••"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                />
+                {errors.confirmPassword && (
+                  <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
+                )}
+              </div>
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                비밀번호
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="mt-1 appearance-none rounded-lg relative block w-full px-4 py-4 border border-[#e8e8e8] placeholder-[#757575] text-gray-900 focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={handleChange}
-              />
-              {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
-            </div>
+            <Button type="submit" variant="primary" size="lg" className="w-full" isLoading={isLoading}>
+              회원가입
+            </Button>
+          </form>
 
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                비밀번호 확인
-              </label>
-              <input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                required
-                className="mt-1 appearance-none rounded-lg relative block w-full px-4 py-4 border border-[#e8e8e8] placeholder-[#757575] text-gray-900 focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
-                placeholder="••••••••"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-              />
-              {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
-              )}
-            </div>
-          </div>
-
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            className="w-full"
-            isLoading={isLoading}
-          >
-            회원가입
-          </Button>
-        </form>
-
-        <div className="text-center mt-4">
-          <p className="text-sm text-gray-600">
+          <p className="mt-4 text-center text-sm text-gray-600">
             이미 계정이 있으신가요?{' '}
             <Link to="/login" className="font-medium text-primary hover:text-primary/90">
               로그인
@@ -264,6 +233,6 @@ export const Register: React.FC = () => {
           </p>
         </div>
       </div>
-    </div>
+    </Layout>
   );
-}; 
+};
