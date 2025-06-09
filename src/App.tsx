@@ -17,7 +17,7 @@ import {UploadResume} from "./pages/interview/UploadResume";       // 이전 MyP
 import {InterviewSetting} from "./pages/interview/InterviewSetting";
 import {EnvironmentCheck} from "./pages/interview/EnvironmentCheck";
 import {InterviewSession} from "./pages/interview/InterviewSession";
-import {FeedbackReport} from "./pages/interview/FeedbackReport";
+import FeedbackReport from "./pages/interview/FeedbackReport";
 
 function App() {
   return (

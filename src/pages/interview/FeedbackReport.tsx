@@ -1,184 +1,156 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+// FeedbackReport.tsx
+
+import React, { useRef } from 'react';
 import { Button } from '../../components/shared/Button';
+import { Radar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+  ChartOptions,
+  Tick,
+} from 'chart.js';
+import html2pdf from 'html2pdf.js';
 
-interface FeedbackItem {
-  category: string;
-  score: number;
-  feedback: string;
-  recommendations: string[];
-}
+ChartJS.register(
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend
+);
 
-interface Answer {
-  question: string;
-  answer: string;
-  feedback: string;
-  score: number;
-}
+const FeedbackReport: React.FC = () => {
+  const reportRef = useRef<HTMLDivElement>(null);
 
-export const FeedbackReport: React.FC = () => {
-  const navigate = useNavigate();
-
-  const overallScore = 85;
-  
-  const feedbackItems: FeedbackItem[] = [
-    {
-      category: '전문성',
-      score: 90,
-      feedback: '기술적 지식과 실무 경험이 잘 드러났습니다.',
-      recommendations: [
-        '최신 기술 트렌드에 대한 관심을 유지하세요.',
-        '실제 프로젝트 경험을 더 구체적으로 설명하면 좋겠습니다.',
-      ],
+  const data = {
+    summary: '몰입도 높았고, 자신감 있는 자세가 인상적이었습니다.',
+    score: 85,
+    detail: {
+      일관성: '전체 흐름에 일관성이 있으며, 중복 없이 답변함.',
+      논리성: '이유와 근거가 명확하여 논리적으로 전달됨.',
+      대처능력: '예상치 못한 질문에도 침착하게 대처함.',
+      구체성: '구체적인 사례를 제시하여 설득력을 높임.',
+      말하기방식: '말 속도가 일정하고 발음이 정확함.',
+      면접태도: '자신감 있으나 다소 긴장한 모습이 있었음.',
     },
-    {
-      category: '의사소통',
-      score: 85,
-      feedback: '명확하고 논리적인 답변을 제시했습니다.',
-      recommendations: [
-        '기술적 용어 설명 시 더 쉬운 예시를 활용해보세요.',
-        '답변 시간 배분을 더 효율적으로 해보세요.',
-      ],
+    chart: {
+      일관성: 4,
+      논리성: 4.5,
+      대처능력: 4,
+      구체성: 3.5,
+      말하기방식: 4,
+      면접태도: 3.5,
     },
-    {
-      category: '문제해결',
-      score: 80,
-      feedback: '체계적인 접근 방식을 보여주었습니다.',
-      recommendations: [
-        '다양한 해결 방안을 더 제시해보세요.',
-        '시간/공간 복잡도를 고려한 설명을 추가해보세요.',
-      ],
-    },
-  ];
-
-  const answers: Answer[] = [
-    {
-      question: '자신이 참여했던 프로젝트 중 가장 도전적이었던 경험에 대해 설명해주세요.',
-      answer: '레거시 코드 리팩토링 프로젝트에서...',
-      feedback: '구체적인 문제 해결 과정과 결과가 잘 설명되었습니다.',
-      score: 90,
-    },
-    {
-      question: 'React의 가상 DOM(Virtual DOM)에 대해 설명해주세요.',
-      answer: '가상 DOM은 실제 DOM의 가벼운 복사본으로...',
-      feedback: '개념은 정확하나 실제 사용 사례가 부족했습니다.',
-      score: 85,
-    },
-  ];
-
-  const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-green-500';
-    if (score >= 80) return 'text-blue-500';
-    if (score >= 70) return 'text-yellow-500';
-    return 'text-red-500';
   };
 
-  const getScoreEmoji = (score: number) => {
-    if (score >= 90) return '🌟';
-    if (score >= 80) return '👍';
-    if (score >= 70) return '🔨';
-    return '📚';
+  const expressionImg =
+    data.score >= 80
+      ? '/smile.png'
+      : data.score >= 50
+      ? '/soso.png'
+      : '/sad.png';
+
+  const chartData = {
+    labels: Object.keys(data.chart),
+    datasets: [
+      {
+        label: '면접 평가',
+        data: Object.values(data.chart),
+        backgroundColor: 'rgba(147, 51, 234, 0.4)',
+        borderColor: '#9333ea',
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  const chartOptions: ChartOptions<'radar'> = {
+    scales: {
+      r: {
+        min: 0,
+        max: 5,
+        ticks: {
+          stepSize: 1,
+          callback: (tickValue: string | number): string => {
+            return typeof tickValue === 'number'
+              ? tickValue.toFixed(0)
+              : String(tickValue);
+          },
+        },
+        pointLabels: {
+          font: { size: 16 },
+        },
+      },
+    },
+    plugins: {
+      legend: {
+        position: 'top',
+        align: 'end',
+        labels: {
+          font: { size: 14 },
+        },
+      },
+    },
+  };
+
+  const handleDownloadPDF = () => {
+    if (!reportRef.current) return;
+
+    const element = reportRef.current;
+    const opt = {
+      margin: 0.5,
+      filename: 'interview-feedback.pdf',
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }, // 자동 페이지 분할
+    };
+
+    html2pdf().set(opt).from(element).save();
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
-            면접 피드백 리포트
-          </h1>
-          <p className="mt-3 text-lg text-gray-500">
-            면접 결과를 분석하여 상세한 피드백을 제공해드립니다
-          </p>
-        </div>
+    <div className="max-w-3xl mx-auto p-6 space-y-8 pt-24">
+      <div className="text-right">
+        <Button onClick={handleDownloadPDF}>PDF 저장</Button>
+      </div>
 
-        {/* 전체 점수 */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-          <div className="text-center">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-              종합 평가
-            </h2>
-            <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-primary bg-opacity-10">
-              <span className={`text-4xl font-bold ${getScoreColor(overallScore)}`}>
-                {overallScore}점
-              </span>
-            </div>
+      <div ref={reportRef} className="space-y-8 bg-white shadow rounded-xl p-6">
+        <h1 className="text-3xl font-bold text-center">피드백 리포트</h1>
+
+        <div className="grid grid-cols-10 gap-4">
+          <div className="col-span-7 p-4 border rounded">
+            <h2 className="text-xl font-semibold mb-2 text-center">종합 소견</h2>
+            <p>{data.summary}</p>
+          </div>
+          <div className="col-span-3 p-4 border rounded flex flex-col items-center justify-center">
+            <h2 className="text-xl font-semibold mb-2">면접관 표정</h2>
+            <img src={expressionImg} alt="표정" className="w-24 h-24" />
           </div>
         </div>
 
-        {/* 카테고리별 피드백 */}
-        <div className="grid gap-8 mb-12">
-          {feedbackItems.map((item, index) => (
-            <div key={index} className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-semibold text-gray-900">
-                  {item.category}
-                </h3>
-                <span className={`text-2xl font-bold ${getScoreColor(item.score)}`}>
-                  {getScoreEmoji(item.score)} {item.score}점
-                </span>
-              </div>
-              <p className="text-gray-700 mb-4">{item.feedback}</p>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-2">
-                  개선을 위한 제안
-                </h4>
-                <ul className="list-disc list-inside space-y-1">
-                  {item.recommendations.map((rec, idx) => (
-                    <li key={idx} className="text-gray-600 text-sm">
-                      {rec}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+        <div className="p-4 border rounded mb-6">
+          <h2 className="text-xl font-semibold text-center mb-2">면접 결과 분석</h2>
+          <Radar data={chartData} options={chartOptions} />
+        </div>
+
+        <div className="p-4 border rounded space-y-4">
+          <h2 className="text-xl font-semibold text-center mb-2">상세 분석</h2>
+          {Object.entries(data.detail).map(([title, content]) => (
+            <div key={title}>
+              <h3 className="font-semibold text-lg">{title}</h3>
+              <p className="pl-2">{content}</p>
             </div>
           ))}
-        </div>
-
-        {/* 질문별 피드백 */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-6">
-            질문별 피드백
-          </h2>
-          <div className="space-y-8">
-            {answers.map((answer, index) => (
-              <div key={index} className="border-b border-gray-200 pb-6 last:border-0 last:pb-0">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      Q{index + 1}. {answer.question}
-                    </h3>
-                    <p className="text-gray-600 text-sm mb-2">
-                      답변: {answer.answer}
-                    </p>
-                    <p className="text-gray-700">
-                      {answer.feedback}
-                    </p>
-                  </div>
-                  <span className={`ml-4 text-lg font-semibold ${getScoreColor(answer.score)}`}>
-                    {answer.score}점
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 액션 버튼 */}
-        <div className="flex justify-center space-x-4">
-          <Button
-            variant="outline"
-            onClick={() => navigate('/library')}
-          >
-            학습 자료 보기
-          </Button>
-          <Button
-            onClick={() => navigate('/MyPage')}
-          >
-            다시 도전하기
-          </Button>
         </div>
       </div>
     </div>
   );
-}; 
+};
+
+export default FeedbackReport;
