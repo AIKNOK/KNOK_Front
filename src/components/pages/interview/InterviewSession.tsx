@@ -65,8 +65,12 @@ export const InterviewSession = () => {
     const setupMedia = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
+          video: true, // 필요 없으면 false
+          audio: {
+            channelCount: 1,
+            sampleRate: 16000,
+            sampleSize: 16,
+          },
         });
         // 비디오 화면에 스트림 연결
         if (videoRef.current) {
@@ -75,6 +79,7 @@ export const InterviewSession = () => {
         streamRef.current = stream;
         mediaStream = stream;
         setMicConnected(true);
+        console.log("🎤 마이크 스트림 준비 완료");
 
         // AudioContext / webkitAudioContext 타입 단언
         const AudioCtxClass =
@@ -90,6 +95,7 @@ export const InterviewSession = () => {
 
         // Chrome에서 HTTPS가 아닌 경우 AudioContext가 suspended가 되므로 resume
         if (audioCtx.state === "suspended") {
+          console.log("🎧 AudioContext 초기 상태:", audioCtx.state);
           await audioCtx.resume();
           console.log("▶ AudioContext resumed (마이크 볼륨 시각화 시작)");
         }
@@ -181,11 +187,7 @@ export const InterviewSession = () => {
   useEffect(() => {
     if (!isInterviewActive) return;
     console.log("▶ 면접이 시작되었습니다. 현재 질문 인덱스:", qIdx);
-
-    startRecording();
-    // ! 주의: qIdx가 바뀔 때마다 이전 핸들러들이 제대로 정리되는지 확인할 것
-    // 즉, stopRecording() 안에서 clearInterval, disconnect, close를 제대로 했는지 체크
-    // 여기서는 의도적으로 startRecording()만 호출
+    startRecording(); // ✅ streamRef는 이미 준비된 상태
   }, [isInterviewActive, qIdx]);
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -206,8 +208,7 @@ export const InterviewSession = () => {
 
     ws.onopen = async () => {
       console.log("✅ WebSocket 연결 성공");
-      const dummyAudio = new Uint8Array(3200); // 약 100ms 분량 (16kHz, 16bit PCM)
-      ws.send(dummyAudio);
+      const dummyAudio = new Uint8Array(16000 * 2); // 약 100ms 분량 (16kHz, 16bit PCM)
       console.log("🟡 초기 dummy 오디오 전송:", dummyAudio.length, "bytes");
 
       // ✅ AudioContext 연결 (이제 streamRef가 완전히 준비됨)
@@ -223,6 +224,7 @@ export const InterviewSession = () => {
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
+        console.log("🎧 onaudioprocess 실행");
         const floatData = e.inputBuffer.getChannelData(0);
         const pcmData = convertFloat32ToInt16(floatData);
         audioChunksRef.current.push(new Float32Array(floatData)); // ✅ 녹음 저장용
