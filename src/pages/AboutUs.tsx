@@ -1,119 +1,133 @@
-import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { useRef } from "react";
+import { motion } from "framer-motion";
 
 const teamMembers = [
   {
-    name: '김재엽',
-    github: 'wera4677',
-    image: '/team/member1.jpg',
+    id: "jaeyeob",
+    name: "김재엽",
+    github: "wera4677",
+    image: "/재엽.png",   // public/재엽.png
+    message: "혼자보다 함께, 좋은 팀워크로 문제를 해결하는 개발자가 되겠습니다.",
   },
   {
-    name: '김태영',
-    github: 'taeyoung0823',
-    image: '/team/member2.jpg',
+    id: "taeyoung",
+    name: "김태영",
+    github: "taeyoung0823",
+    image: "/태영.png",   // public/태영.png
+    message: "사람을 위한 기술을 고민하는 개발자가 되겠습니다.",
   },
   {
-    name: '이건호',
-    github: 'hohoc99',
-    image: '/team/member3.jpg',
+    id: "geonho",
+    name: "이건호",
+    github: "DanieLCyma",
+    image: "/건호.png",   // public/건호.png
+    message: "끊임없이 배우고, 성장하는 개발자가 되겠습니다.",
   },
   {
-    name: '전유나',
-    github: 'yunajeon',
-    image: '/team/member4.jpg',
+    id: "yuna",
+    name: "전유나",
+    github: "yunajeon",
+    image: "/유나.png",   // public/유나.png
+    message: "사용자 경험을 최우선으로 생각하는 개발자가 되겠습니다.",
   },
   {
-    name: '최동욱',
-    github: 'ddungddangi',
-    image: '/team/member5.jpg',
+    id: "donguk",
+    name: "최동욱",
+    github: "ddungddangi",
+    image: "/동욱.png",   // public/동욱.png
+    message: "문제의 본질을 꿰뚫고 해결책을 제시하는 개발자가 되겠습니다.",
   },
 ];
 
 export default function AboutUs() {
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const scrollToMessage = (id: string) => {
+    const el = messageRefs.current[id];
+    if (el) {
+      const offset = el.getBoundingClientRect().top + window.scrollY - 120;
+      window.scrollTo({ top: offset, behavior: "smooth" });
+    }
+  };
+
   return (
     <div className="bg-white">
       {/* Hero Section */}
-      <section className="pt-24 bg-secondary">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-          <div>
-            <h2 className="text-primary text-base font-semibold tracking-wider uppercase">
-              vision
-            </h2>
-            <h1 className="mt-4 text-4xl font-medium tracking-tight text-gray-900 max-w-3xl">
-              "Knok은 AI 기반의 대화형 면접 시뮬레이션으로, 당신의 성공적인 취업 여정을 돕는 데 집중합니다."
-            </h1>
-          </div>
+      <section className="bg-secondary py-16 px-4">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-primary text-base font-semibold tracking-wider uppercase">
+            VISION
+          </h2>
+          <h1 className="mt-4 text-4xl font-medium tracking-tight text-gray-900 max-w-4xl leading-snug">
+            "Knok은 AI 기반의 대화형 면접 시뮬레이션으로,<br />
+            당신의 성공적인 취업 여정을 돕는 데 집중합니다."
+          </h1>
         </div>
       </section>
 
-      {/* Team Section */}
-      <section className="py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-primary text-base font-semibold tracking-wider uppercase">
+      {/* Profile Icons */}
+      <section className="py-20 px-4">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-primary text-base font-semibold tracking-wider uppercase mb-12">
             ORGANIZATION
           </h2>
-
-          <div className="mt-16 grid grid-cols-1 gap-12 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-12">
             {teamMembers.map((member) => (
               <motion.div
-                key={member.name}
+                key={member.id}
                 className="text-center"
                 whileHover={{ scale: 1.05 }}
                 transition={{ type: "spring", stiffness: 300 }}
               >
-                <div className="relative mx-auto w-48 h-48 rounded-full border-2 border-primary mb-6 overflow-hidden">
-                  <img
-                    src={member.image}
-                    alt={member.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <h3 className="text-2xl font-semibold text-gray-900 mb-2">
-                  {member.name}
-                </h3>
-                <div className="flex items-center justify-center space-x-2">
-                  <img
-                    src="/github-icon.png"
-                    alt="GitHub"
-                    className="w-6 h-6"
-                  />
-                  <span className="text-xl text-gray-900">
-                    {member.github}
-                  </span>
-                </div>
+                <button
+                  onClick={() => scrollToMessage(member.id)}
+                  className="focus:outline-none"
+                >
+                  <div className="w-52 h-52 rounded-full border-2 border-primary overflow-hidden mx-auto mb-4">
+                    <img src={member.image} className="w-full h-full object-cover" />
+                  </div>
+                </button>
+                <h3 className="text-lg font-semibold text-gray-900">{member.name}</h3>
+                <a
+                  href={`https://github.com/${member.github}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center mt-1 text-sm text-gray-700 hover:text-primary"
+                >
+                  <img src="/github.png" className="w-5 h-5 mr-1" />
+                  {member.github}
+                </a>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-24 bg-gray-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="relative overflow-hidden rounded-2xl bg-[url('/cta-bg.jpg')] bg-cover bg-center">
-            <div className="absolute inset-0 bg-black/70" />
-            <div className="relative py-24 px-8 text-center">
-              <h2 className="text-5xl font-medium text-white">
-                Ready for your career
-              </h2>
-              <div className="mt-8">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="inline-block"
-                >
-                  <Link
-                    to="/interview"
-                    className="inline-flex items-center px-8 py-4 bg-primary text-xl font-medium rounded-md text-white hover:bg-primary/90 transition-colors"
-                  >
-                    Start Interview
-                  </Link>
-                </motion.div>
+      {/* Messages with Floating Profile */}
+      <section className="bg-gray-100 py-20 px-4">
+        <div className="max-w-5xl mx-auto space-y-12">
+          {teamMembers.map((member) => (
+            <div key={member.id} className="relative">
+              <button
+                onClick={() => scrollToMessage(member.id)}
+                className="absolute -left-12 top-1/2 transform -translate-y-1/2 focus:outline-none"
+              >
+                <div className="w-24 h-24 rounded-full border-2 border-primary overflow-hidden bg-white">
+                  <img src={member.image} className="w-full h-full object-cover" />
+                </div>
+              </button>
+              <div
+                ref={(el) => (messageRefs.current[member.id] = el)}
+                className="bg-white border border-gray-300 rounded-xl p-8 pl-32 shadow-sm min-h-[160px]"
+              >
+                <p className="text-lg text-gray-800 font-medium leading-relaxed">
+                  {member.message}
+                </p>
               </div>
             </div>
-          </div>
+          ))}
         </div>
       </section>
     </div>
   );
-} 
+}

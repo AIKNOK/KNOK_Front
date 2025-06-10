@@ -1,22 +1,18 @@
-// src/components/layout/Header.tsx
-
 import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
-// navItems의 Interview 경로를 '/interview/upload-resume'로 변경
+// navItems에서 Library → History로 변경
 const navItems = [
   { name: "Home", path: "/" },
   { name: "About us", path: "/about" },
-  { name: "Interview", path: "/interview/upload-resume" },  // 변경된 부분
-  { name: "Library", path: "/library" },
+  { name: "Interview", path: "/interview/upload-resume" },
+  { name: "History", path: "/history" },  
 ];
 
 const Header: React.FC = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-
-  // 로컬 스토리지에 token이 있으면 로그인 상태로 간주
   const [token, setToken] = useState<string | null>(
     localStorage.getItem("token")
   );
@@ -40,7 +36,7 @@ const Header: React.FC = () => {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-[92px]">
-          {/* 로고 및 홈 링크 */}
+          {/* 로고 */}
           <Link to="/" className="flex items-center space-x-2">
             <img src="/logo.png" alt="KNOK Logo" className="h-12 w-auto" />
             <span className="text-[32px] font-semibold text-primary tracking-tighter">
@@ -48,7 +44,7 @@ const Header: React.FC = () => {
             </span>
           </Link>
 
-          {/* 중앙 네비게이션 (데스크톱에서만 visible) */}
+          {/* 중앙 네비 */}
           <div className="hidden md:flex items-center space-x-10">
             {navItems.map((item) => (
               <Link
@@ -65,14 +61,11 @@ const Header: React.FC = () => {
             ))}
           </div>
 
-          {/* 우측 로그인/회원가입 또는 문의하기/로그아웃 */}
+          {/* 우측 버튼 */}
           <div className="flex items-center space-x-4">
             {!token ? (
               <>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <Link
                     to="/login"
                     className="bg-primary text-white px-6 py-3 rounded-md text-base font-medium tracking-tight hover:bg-primary/90 transition-colors"
@@ -80,10 +73,7 @@ const Header: React.FC = () => {
                     Login
                   </Link>
                 </motion.div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <Link
                     to="/register"
                     className="border border-primary text-primary px-6 py-3 rounded-md text-base font-medium tracking-tight hover:bg-primary hover:text-white transition-colors"
@@ -94,11 +84,7 @@ const Header: React.FC = () => {
               </>
             ) : (
               <>
-                {/* 로그인 상태: 문의하기 버튼(기존 마이페이지 위치) */}
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <Link
                     to="/contact"
                     className="bg-primary text-white px-6 py-3 rounded-md text-base font-medium tracking-tight hover:bg-primary/90 transition-colors"
@@ -106,10 +92,7 @@ const Header: React.FC = () => {
                     문의하기
                   </Link>
                 </motion.div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <button
                     onClick={handleLogout}
                     className="border border-primary text-primary px-6 py-3 rounded-md text-base font-medium tracking-tight hover:bg-primary hover:text-white transition-colors"
