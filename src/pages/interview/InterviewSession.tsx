@@ -16,16 +16,32 @@ const MAX_ANSWER_DURATION = 90;
 const userEmail = localStorage.getItem("user_email") || "anonymous";
 const videoId = `interview_${userEmail}_${Date.now()}`;
 
-
 export const InterviewSession = () => {
-  /*=============================================*/
-
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoPathRef = useRef<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const fullVideoChunksRef = useRef<Blob[]>([]);
+
+  const [micConnected, setMicConnected] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [isInterviewActive, setIsInterviewActive] = useState(false);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [qIdx, setQIdx] = useState(0);
+  const [recordTime, setRecordTime] = useState(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [resumeText, setResumeText] = useState("");  // ✅ 누락된 상태 추가
+  const [isLoading, setIsLoading] = useState(false);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const audioChunksRef = useRef<Float32Array[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const recordTimerRef = useRef<number | null>(null);
+
+  const { countsRef, segmentsRef } = usePostureTracking(videoRef, videoId);
 
   const convertFloat32ToInt16 = (buffer: Float32Array): Uint8Array => {
     const result = new Int16Array(buffer.length);
@@ -36,34 +52,6 @@ export const InterviewSession = () => {
     return new Uint8Array(result.buffer);
   };
 
-  // 포즈 추적 훅 (videoRef 전달 → 내부에서 얼굴/자세 추적)
-  const { countsRef, segmentsRef } = usePostureTracking(videoRef, videoId);
-
-
-  // 마이크 상태: 연결 여부, 볼륨 레벨
-  const [micConnected, setMicConnected] = useState(false);
-  const [micLevel, setMicLevel] = useState(0);
-
-  // 면접 진행 상태
-  const [isInterviewActive, setIsInterviewActive] = useState(false);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [qIdx, setQIdx] = useState(0);
-  const [recordTime, setRecordTime] = useState(0);
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState(""); // 프론트 테스트용(실제 STT는 백엔드)
-
-  // 녹음 관련 refs
-  const wsRef = useRef<WebSocket | null>(null);
-  const audioChunksRef = useRef<Float32Array[]>([]);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const recordTimerRef = useRef<number | null>(null);
-
-  const [isLoading, setIsLoading] = useState(false);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 1) 마운트 시: 카메라 + 마이크 연결 & 볼륨 시각화
-  // ─────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     let analyser: AnalyserNode;
     let animId: number;
@@ -72,42 +60,20 @@ export const InterviewSession = () => {
     const setupMedia = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: true, // 필요 없으면 false
-          audio: {
-            channelCount: 1,
-            sampleRate: 16000,
-            sampleSize: 16,
-          },
+          video: true,
+          audio: { channelCount: 1, sampleRate: 16000, sampleSize: 16 },
         });
-        // 비디오 화면에 스트림 연결
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
+        if (videoRef.current) videoRef.current.srcObject = stream;
         streamRef.current = stream;
         mediaStream = stream;
         setMicConnected(true);
-        console.log("🎤 마이크 스트림 준비 완료");
 
-        // AudioContext / webkitAudioContext 타입 단언
-        const AudioCtxClass =
-          (window as any).AudioContext || (window as any).webkitAudioContext;
-        if (!AudioCtxClass) {
-          alert("이 브라우저는 AudioContext를 지원하지 않습니다.");
-          return;
-        }
-
-        // 샘플레이트를 44100으로 고정 (encodeWAV와 일치시킴)
+        const AudioCtxClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtxClass) return alert("이 브라우저는 AudioContext를 지원하지 않습니다.");
         const audioCtx = new AudioCtxClass({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
+        if (audioCtx.state === "suspended") await audioCtx.resume();
 
-        // Chrome에서 HTTPS가 아닌 경우 AudioContext가 suspended가 되므로 resume
-        if (audioCtx.state === "suspended") {
-          console.log("🎧 AudioContext 초기 상태:", audioCtx.state);
-          await audioCtx.resume();
-          console.log("▶ AudioContext resumed (마이크 볼륨 시각화 시작)");
-        }
-
-        // 볼륨 시각화를 위한 AnalyserNode
         const source = audioCtx.createMediaStreamSource(stream);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
@@ -116,8 +82,7 @@ export const InterviewSession = () => {
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         const draw = () => {
           analyser.getByteFrequencyData(dataArray);
-          const avg =
-            dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+          const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
           setMicLevel(Math.min(100, (avg / 255) * 100));
           animId = requestAnimationFrame(draw);
         };
@@ -125,7 +90,6 @@ export const InterviewSession = () => {
       } catch (err) {
         console.error("getUserMedia error:", err);
         setMicConnected(false);
-        // 환경 점검 페이지로 강제 이동
         navigate("/interview/check-environment");
       }
     };
@@ -133,27 +97,15 @@ export const InterviewSession = () => {
     setupMedia();
 
     return () => {
-      // 언마운트 시 정리
       cancelAnimationFrame(animId);
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-      if (mediaStream) {
-        mediaStream.getTracks().forEach((t) => t.stop());
-      }
+      if (audioContextRef.current) audioContextRef.current.close();
+      if (mediaStream) mediaStream.getTracks().forEach((t) => t.stop());
     };
   }, [navigate]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 2) "AI 면접 시작하기" 버튼 클릭 → 질문 생성 → 상태 세팅 (isInterviewActive=true)
-  // ─────────────────────────────────────────────────────────────────────────────
   const onStart = async () => {
-    const token =
-      localStorage.getItem("id_token") || localStorage.getItem("access_token");
-    if (!token) {
-      alert("로그인이 필요합니다.");
-      return;
-    }
+    const token = localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    if (!token) return alert("로그인이 필요합니다.");
     setIsLoading(true);
 
     try {
@@ -164,12 +116,9 @@ export const InterviewSession = () => {
           "Content-Type": "application/json",
         },
       });
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-      const { questions: qs }: { questions: string[] } = await res.json();
+      if (!res.ok) throw new Error(await res.text());
 
-      // Question 타입으로 변환
+      const { questions: qs }: { questions: string[] } = await res.json();
       const mapped: Question[] = qs.map((text, idx) => ({
         id: `${idx + 1}`,
         text,
@@ -180,21 +129,14 @@ export const InterviewSession = () => {
       setQIdx(0);
       setIsInterviewActive(true);
 
-      // 전체 면접 영상 녹화 시작
       if (streamRef.current) {
-        mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
-          mimeType: "video/webm",
-        });
+        mediaRecorderRef.current = new MediaRecorder(streamRef.current, { mimeType: "video/webm" });
         mediaRecorderRef.current.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            fullVideoChunksRef.current.push(event.data);
-          }
+          if (event.data.size > 0) fullVideoChunksRef.current.push(event.data);
         };
         mediaRecorderRef.current.start();
-        console.log("🎥 전체 면접 영상 녹화 시작");
       }
 
-      // 이력서 텍스트 가져오기
       const resumeRes = await fetch(`${API_BASE}/get-resume-text/`, {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
@@ -202,7 +144,6 @@ export const InterviewSession = () => {
       if (resumeRes.ok) {
         const { resume_text } = await resumeRes.json();
         setResumeText(resume_text || "");
-        console.log("📄 resume_text:", resume_text);
       } else {
         console.warn("⚠️ 이력서 텍스트 응답 오류:", resumeRes.status);
       }
@@ -212,51 +153,26 @@ export const InterviewSession = () => {
     } finally {
       setIsLoading(false);
     }
-
-      // → 이제 useEffect에서 녹음이 자동으로 시작된다.
-    } catch (err) {
-      console.error("질문 생성 실패:", err);
-      alert("질문 생성 실패");
-    } finally {
-      setIsLoading(false);
-    }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 3) isInterviewActive 또는 qIdx 변경 시 → 녹음 자동 시작
-  // ─────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isInterviewActive) return;
-    console.log("▶ 면접이 시작되었습니다. 현재 질문 인덱스:", qIdx);
-    startRecording(); // ✅ streamRef는 이미 준비된 상태
+    startRecording();
   }, [isInterviewActive, qIdx]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 4) 녹음 시작 → AudioContext 생성 → ScriptProcessorNode로 샘플 수집
-  // ─────────────────────────────────────────────────────────────────────────────
   const startRecording = async () => {
     if (!questions[qIdx] || !streamRef.current) return;
-
-    const token =
-      localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    const token = localStorage.getItem("id_token") || localStorage.getItem("access_token");
     const email = localStorage.getItem("user_email") || "anonymous";
     const questionId = questions[qIdx].id;
 
-    const ws = new WebSocket(
-      `ws://localhost:8001/ws/transcribe?email=${email}&question_id=${questionId}&token=${token}`
-    );
+    const ws = new WebSocket(`ws://localhost:8001/ws/transcribe?email=${email}&question_id=${questionId}&token=${token}`);
     wsRef.current = ws;
 
     ws.onopen = async () => {
-      console.log("✅ WebSocket 연결 성공");
-      const dummyAudio = new Uint8Array(16000 * 2); // 약 100ms 분량 (16kHz, 16bit PCM)
-      console.log("🟡 초기 dummy 오디오 전송:", dummyAudio.length, "bytes");
-
-      // ✅ AudioContext 연결 (이제 streamRef가 완전히 준비됨)
-      const AudioContextClass =
-        window.AudioContext || (window as any).webkitAudioContext;
+      const dummyAudio = new Uint8Array(16000 * 2);
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       const audioCtx = new AudioContextClass({ sampleRate: 16000 });
-      console.log("🎧 AudioContext 샘플레이트:", audioCtx.sampleRate);
       audioContextRef.current = audioCtx;
       await audioCtx.resume();
 
@@ -265,26 +181,21 @@ export const InterviewSession = () => {
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
-        console.log("🎧 onaudioprocess 실행");
         const floatData = e.inputBuffer.getChannelData(0);
         const pcmData = convertFloat32ToInt16(floatData);
-        audioChunksRef.current.push(new Float32Array(floatData)); // ✅ 녹음 저장용
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(pcmData);
-          console.log("🎙️ 오디오 전송:", pcmData.length, "bytes");
-        }
+        audioChunksRef.current.push(new Float32Array(floatData));
+        if (ws.readyState === WebSocket.OPEN) ws.send(pcmData);
       };
 
       source.connect(processor);
       processor.connect(audioCtx.destination);
 
-      // ✅ 타이머 시작
       setRecordTime(0);
       setIsRecording(true);
       recordTimerRef.current = window.setInterval(() => {
         setRecordTime((prev) => {
           if (prev + 1 >= MAX_ANSWER_DURATION) {
-            (async () => await stopRecording())();
+            stopRecording();
             return prev;
           }
           return prev + 1;
@@ -294,42 +205,19 @@ export const InterviewSession = () => {
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.transcript) {
-        setTranscript((prev) => prev + data.transcript + "\n");
-      }
-      if (data.status === "done") {
-        console.log("✅ 백엔드 업로드 완료");
-        ws.close();
-      }
+      if (data.transcript) setTranscript((prev) => prev + data.transcript + "\n");
     };
 
-    ws.onerror = (e) => {
-      console.error("❌ WebSocket 오류", e);
-    };
-
-    ws.onclose = () => {
-      console.log("🔌 WebSocket 종료");
-    };
+    ws.onerror = (e) => console.error("WebSocket 오류", e);
+    ws.onclose = () => console.log("WebSocket 종료");
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // 5) 녹음 중지 → 샘플 합쳐서 WAV로 변환 → 서버 업로드 → 질문 변경 or 면접 종료
-  // ─────────────────────────────────────────────────────────────────────────────
-
   const stopRecording = async () => {
-    console.log("▶ stopRecording 호출됨");
     setIsRecording(false);
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
 
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      console.log("▶ 녹음 타이머 정지");
-    }
-
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      const endSignal = new TextEncoder().encode("END"); // <-- 중요!
-      wsRef.current.send(endSignal);
-      console.log("📤 END 신호 전송 (바이트)");
-
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(new TextEncoder().encode("END"));
       await new Promise((res) => setTimeout(res, 300));
       wsRef.current.close();
     }
@@ -338,14 +226,11 @@ export const InterviewSession = () => {
     audioContextRef.current?.close();
     streamRef.current?.getTracks().forEach((t) => t.stop());
 
-    const token =
-      localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    const token = localStorage.getItem("id_token") || localStorage.getItem("access_token");
     const email = localStorage.getItem("user_email") || "anonymous";
-    const currentQ = questions[qIdx - 1] ||
-      questions[qIdx] || { id: "unknown" };
+    const currentQ = questions[qIdx - 1] || questions[qIdx] || { id: "unknown" };
     const questionId = currentQ.id;
 
-    // Float32Array[] → Float32Array
     const floatArray = audioChunksRef.current.reduce((acc, cur) => {
       const tmp = new Float32Array(acc.length + cur.length);
       tmp.set(acc, 0);
@@ -356,9 +241,7 @@ export const InterviewSession = () => {
     const wavBlob = encodeWAV(floatArray, 16000);
     const wavFile = new File([wavBlob], "answer.wav", { type: "audio/wav" });
     const textBlob = new Blob([transcript], { type: "text/plain" });
-    const textFile = new File([textBlob], "transcript.txt", {
-      type: "text/plain",
-    });
+    const textFile = new File([textBlob], "transcript.txt", { type: "text/plain" });
 
     const formData = new FormData();
     formData.append("audio", wavFile);
@@ -367,28 +250,16 @@ export const InterviewSession = () => {
     formData.append("question_id", questionId);
 
     try {
-
-      const uploadRes = await fetch(`${API_BASE}/video/upload/`, {
-
-      await fetch(`${API_BASE}/audio/upload/`, {
-
+      const uploadRes = await fetch(`${API_BASE}/audio/upload/`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-
       const uploadJson = await uploadRes.json();
-      
-      console.log("▶ 오디오 업로드 응답 상태:", uploadRes.status);
-
-      console.log("✅ S3 업로드 완료");
-
+      console.log("✅ S3 업로드 완료", uploadJson);
     } catch (err) {
       console.error("❌ 업로드 실패", err);
     }
-
 
     // 5-4) 꼬리 질문 판단 요청
     const decideFollowup = async (userAnswer: string): Promise<boolean> => {
