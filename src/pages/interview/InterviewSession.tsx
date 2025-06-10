@@ -32,7 +32,7 @@ export const InterviewSession = () => {
   const [recordTime, setRecordTime] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [resumeText, setResumeText] = useState("");  // ✅ 누락된 상태 추가
+  const [resumeText, setResumeText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -52,6 +52,7 @@ export const InterviewSession = () => {
     return new Uint8Array(result.buffer);
   };
 
+  // 초기 미디어 스트림 설정 (한 번만 실행)
   useEffect(() => {
     let analyser: AnalyserNode;
     let animId: number;
@@ -109,52 +110,42 @@ export const InterviewSession = () => {
     setIsLoading(true);
 
     try {
+      // 질문 생성
       const res = await fetch(`${API_BASE}/generate-resume-questions/`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       });
       if (!res.ok) throw new Error(await res.text());
-
       const { questions: qs }: { questions: string[] } = await res.json();
-      const mapped: Question[] = qs.map((text, idx) => ({
-        id: `${idx + 1}`,
-        text,
-        type: "behavioral",
-        difficulty: "medium",
-      }));
+      const mapped: Question[] = qs.map((text, idx) => ({ id: `${idx + 1}`, text, type: "behavioral", difficulty: "medium" }));
       setQuestions(mapped);
       setQIdx(0);
       setIsInterviewActive(true);
 
+      // 전체 영상 녹화 시작
       if (streamRef.current) {
         mediaRecorderRef.current = new MediaRecorder(streamRef.current, { mimeType: "video/webm" });
-        mediaRecorderRef.current.ondataavailable = (event) => {
-          if (event.data.size > 0) fullVideoChunksRef.current.push(event.data);
+        mediaRecorderRef.current.ondataavailable = (ev) => {
+          if (ev.data.size > 0) fullVideoChunksRef.current.push(ev.data);
         };
         mediaRecorderRef.current.start();
       }
 
-      const resumeRes = await fetch(`${API_BASE}/get-resume-text/`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // 이력서 텍스트 가져오기
+      const resumeRes = await fetch(`${API_BASE}/get-resume-text/`, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
       if (resumeRes.ok) {
         const { resume_text } = await resumeRes.json();
         setResumeText(resume_text || "");
-      } else {
-        console.warn("⚠️ 이력서 텍스트 응답 오류:", resumeRes.status);
       }
     } catch (err) {
-      console.error("❌ 질문 생성 실패:", err);
+      console.error("질문 생성 실패:", err);
       alert("질문 생성 실패");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // 질문 인덱스 변화 시마다 STT 녹음 시작
   useEffect(() => {
     if (!isInterviewActive) return;
     startRecording();
@@ -169,24 +160,20 @@ export const InterviewSession = () => {
     const ws = new WebSocket(`ws://localhost:8001/ws/transcribe?email=${email}&question_id=${questionId}&token=${token}`);
     wsRef.current = ws;
 
+    // 기존 AudioContext와 스트림을 재사용하여 연결 유지
     ws.onopen = async () => {
-      const dummyAudio = new Uint8Array(16000 * 2);
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      const audioCtx = new AudioContextClass({ sampleRate: 16000 });
-      audioContextRef.current = audioCtx;
-      await audioCtx.resume();
+      const audioCtx = audioContextRef.current!;
+      if (audioCtx.state === "suspended") await audioCtx.resume();
 
       const source = audioCtx.createMediaStreamSource(streamRef.current!);
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
-
       processor.onaudioprocess = (e) => {
         const floatData = e.inputBuffer.getChannelData(0);
         const pcmData = convertFloat32ToInt16(floatData);
         audioChunksRef.current.push(new Float32Array(floatData));
         if (ws.readyState === WebSocket.OPEN) ws.send(pcmData);
       };
-
       source.connect(processor);
       processor.connect(audioCtx.destination);
 
@@ -194,10 +181,7 @@ export const InterviewSession = () => {
       setIsRecording(true);
       recordTimerRef.current = window.setInterval(() => {
         setRecordTime((prev) => {
-          if (prev + 1 >= MAX_ANSWER_DURATION) {
-            stopRecording();
-            return prev;
-          }
+          if (prev + 1 >= MAX_ANSWER_DURATION) { stopRecording(); return prev; }
           return prev + 1;
         });
       }, 1000);
@@ -207,7 +191,6 @@ export const InterviewSession = () => {
       const data = JSON.parse(event.data);
       if (data.transcript) setTranscript((prev) => prev + data.transcript + "\n");
     };
-
     ws.onerror = (e) => console.error("WebSocket 오류", e);
     ws.onclose = () => console.log("WebSocket 종료");
   };
@@ -223,26 +206,24 @@ export const InterviewSession = () => {
     }
 
     processorRef.current?.disconnect();
-    audioContextRef.current?.close();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
 
+    // 오디오 스트림은 유지하여 다음 질문에서도 사용
+
+    // 녹음된 데이터로 S3 업로드 준비
     const token = localStorage.getItem("id_token") || localStorage.getItem("access_token");
     const email = localStorage.getItem("user_email") || "anonymous";
     const currentQ = questions[qIdx - 1] || questions[qIdx] || { id: "unknown" };
     const questionId = currentQ.id;
-
     const floatArray = audioChunksRef.current.reduce((acc, cur) => {
       const tmp = new Float32Array(acc.length + cur.length);
       tmp.set(acc, 0);
       tmp.set(cur, acc.length);
       return tmp;
     }, new Float32Array());
-
     const wavBlob = encodeWAV(floatArray, 16000);
     const wavFile = new File([wavBlob], "answer.wav", { type: "audio/wav" });
     const textBlob = new Blob([transcript], { type: "text/plain" });
     const textFile = new File([textBlob], "transcript.txt", { type: "text/plain" });
-
     const formData = new FormData();
     formData.append("audio", wavFile);
     formData.append("transcript", textFile);
