@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from '../../components/shared/Button';
-import { usePostureTracking } from "../../../hooks/usePostureTracking";
+import { usePostureTracking } from "../../hooks/usePostureTracking";
 import { encodeWAV } from "../../utils/encodeWAV";
 
 interface Question {
@@ -12,14 +12,20 @@ interface Question {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
-const MAX_ANSWER_DURATION = 90; // 초
+const MAX_ANSWER_DURATION = 90;
+const userEmail = localStorage.getItem("user_email") || "anonymous";
+const videoId = `interview_${userEmail}_${Date.now()}`;
+
 
 export const InterviewSession = () => {
   /*=============================================*/
 
   const navigate = useNavigate();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const videoPathRef = useRef<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const fullVideoChunksRef = useRef<Blob[]>([]);
 
   const convertFloat32ToInt16 = (buffer: Float32Array): Uint8Array => {
     const result = new Int16Array(buffer.length);
@@ -31,7 +37,8 @@ export const InterviewSession = () => {
   };
 
   // 포즈 추적 훅 (videoRef 전달 → 내부에서 얼굴/자세 추적)
-  const badPostureCountRef = usePostureTracking(videoRef);
+  const { countsRef, segmentsRef } = usePostureTracking(videoRef, videoId);
+
 
   // 마이크 상태: 연결 여부, 볼륨 레벨
   const [micConnected, setMicConnected] = useState(false);
@@ -172,6 +179,40 @@ export const InterviewSession = () => {
       setQuestions(mapped);
       setQIdx(0);
       setIsInterviewActive(true);
+
+      // 전체 면접 영상 녹화 시작
+      if (streamRef.current) {
+        mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
+          mimeType: "video/webm",
+        });
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            fullVideoChunksRef.current.push(event.data);
+          }
+        };
+        mediaRecorderRef.current.start();
+        console.log("🎥 전체 면접 영상 녹화 시작");
+      }
+
+      // 이력서 텍스트 가져오기
+      const resumeRes = await fetch(`${API_BASE}/get-resume-text/`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (resumeRes.ok) {
+        const { resume_text } = await resumeRes.json();
+        setResumeText(resume_text || "");
+        console.log("📄 resume_text:", resume_text);
+      } else {
+        console.warn("⚠️ 이력서 텍스트 응답 오류:", resumeRes.status);
+      }
+    } catch (err) {
+      console.error("❌ 질문 생성 실패:", err);
+      alert("질문 생성 실패");
+    } finally {
+      setIsLoading(false);
+    }
+
       // → 이제 useEffect에서 녹음이 자동으로 시작된다.
     } catch (err) {
       console.error("질문 생성 실패:", err);
@@ -326,17 +367,135 @@ export const InterviewSession = () => {
     formData.append("question_id", questionId);
 
     try {
+
+      const uploadRes = await fetch(`${API_BASE}/video/upload/`, {
+
       await fetch(`${API_BASE}/audio/upload/`, {
+
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
         },
         body: formData,
       });
+
+      const uploadJson = await uploadRes.json();
+      
+      console.log("▶ 오디오 업로드 응답 상태:", uploadRes.status);
+
       console.log("✅ S3 업로드 완료");
+
     } catch (err) {
       console.error("❌ 업로드 실패", err);
     }
+
+
+    // 5-4) 꼬리 질문 판단 요청
+    const decideFollowup = async (userAnswer: string): Promise<boolean> => {
+      if (!token || !resumeText) return false;
+
+      try {
+        const res = await fetch(`${API_BASE}/followup/check/`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            resume_text: resumeText,
+            user_answer: userAnswer,
+          }),
+        });
+
+        const data = await res.json();
+        console.log("🟢 follow-up 판단 결과:", data);
+
+        const currentQuestionId = questions[qIdx].id; 
+        const baseId = currentQuestionId.split("-")[0]; 
+
+        const followups = questions.filter(q =>
+          q.id.startsWith(`${baseId}-`)
+        );
+
+        const followupCount = followups.length;
+
+        if (data.followup && data.generated_question && followupCount < 2) {
+          const newId = `${baseId}-${followupCount + 1}`;
+
+          setQuestions((prev) => [
+            ...prev.slice(0, qIdx + 1),
+            {
+              id: newId,
+              text: data.generated_question,
+              type: "behavioral",
+              difficulty: "medium",
+            },
+            ...prev.slice(qIdx + 1),
+          ]);
+          return true;
+        }
+      } catch (e) {
+        console.error("followup 요청 실패:", e);
+      }
+      return false;
+    };
+    // 실제 응답으로 바꾸기 전까진 하드코딩된 답변 사용용
+    const dummyAnswer = "옛 어른들께서 하신 말씀 중에 “농업이 살아야 나라가 산다”는 이야기를 들은 적이 있습니다. 저는 농업이 가진 가치와 가능성을 높게 평가합니다. 하지만 디지털 전환의 흐름 속에서 농업은 여전히 소외되는 경우가 있다고 느꼈습니다. 저는 AWS 클라우드 스쿨에서 쌓은 경험과 역량을 바탕으로, 스마트 농업, 클라우드 전환, 정보 보안 강화 등 다양한 IT 분야에서 제 능력을 충분히 발휘할 수 있다고 생각합니다. "
+    await decideFollowup(dummyAnswer); //STT가 연결되면 transcript로 대체체
+
+    // 전체 영상 업로드 처리
+    if (mediaRecorderRef.current && qIdx === questions.length - 1) {
+      const recorder = mediaRecorderRef.current;
+  
+      recorder.onstop = async () => {
+        const fullVideoBlob = new Blob(fullVideoChunksRef.current, {
+          type: "video/webm",
+        });
+        const videoForm = new FormData();
+        videoForm.append("video", fullVideoBlob, `${videoId}.webm`);
+        videoForm.append("videoId", videoId);
+
+        try {
+          const res = await fetch(`${API_BASE}/video/upload/`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: videoForm,
+          });
+
+          const resJson = await res.json();
+          videoPathRef.current = resJson.video_path;
+
+          console.log("🎥 전체 영상 업로드 완료:", videoPathRef.current);
+
+          if (videoPathRef.current) {
+            const clipRes = await fetch(`${API_BASE}/video/extract-clips/`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                videoId,
+                segments: segmentsRef.current,
+                video_path: videoPathRef.current,
+              }),
+            });
+            console.log("🎞️ 클립 추출 요청 응답 상태:", clipRes.status);
+          } else {
+            console.warn("⚠️ video_path가 설정되지 않아 클립 추출을 생략합니다.");
+          }
+
+          navigate("/interview/feedback");
+
+        } catch (err) {
+          console.error("🔥 전체 영상 업로드 또는 클립 추출 실패:", err);
+        }
+      };
+
+      recorder.stop();
+    }
+
+    // 5-5) 다음 질문으로 이동
 
     if (qIdx < questions.length - 1) {
       setQIdx((prev) => prev + 1);
@@ -344,7 +503,25 @@ export const InterviewSession = () => {
       audioChunksRef.current = [];
     } else {
       setIsInterviewActive(false);
+
+      // 자세 카운트 전송
+      try {
+        const postureRes = await fetch(`${API_BASE}/posture/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            videoId,
+            counts: countsRef.current,
+            segments: segmentsRef.current,
+          }),
+        });
+        console.log("▶ 자세 카운트 전송 응답 상태:", postureRes.status);
+      } catch (err) {
+        console.error("자세 카운트 전송 실패:", err);
+      }
+
       navigate("/interview/feedback");
+
     }
   };
 
