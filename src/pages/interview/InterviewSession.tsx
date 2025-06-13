@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from '../../components/shared/Button';
+import { Button } from "../../components/shared/Button";
 import { usePostureTracking } from "../../hooks/usePostureTracking";
 import { encodeWAV } from "../../utils/encodeWAV";
 
@@ -37,13 +37,14 @@ export const InterviewSession = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [clipsLoading, setClipsLoading] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [difficulty, setDifficulty] = useState("중간");
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioChunksRef = useRef<Float32Array[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const recordTimerRef = useRef<number | null>(null);
-  const timeoutRef     = useRef<number | null>(null);
+  const timeoutRef = useRef<number | null>(null);
 
   const { countsRef, segmentsRef } = usePostureTracking(videoRef, videoId);
 
@@ -75,7 +76,8 @@ export const InterviewSession = () => {
         mediaStream = stream;
         setMicConnected(true);
 
-        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        const AudioCtx =
+          (window as any).AudioContext || (window as any).webkitAudioContext;
         if (!AudioCtx) return alert("AudioContext 미지원");
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
@@ -89,7 +91,8 @@ export const InterviewSession = () => {
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         const draw = () => {
           analyser.getByteFrequencyData(dataArray);
-          const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+          const avg =
+            dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
           setMicLevel(Math.min(100, (avg / 255) * 100));
           animId = requestAnimationFrame(draw);
         };
@@ -104,13 +107,14 @@ export const InterviewSession = () => {
     return () => {
       cancelAnimationFrame(animId);
       audioContextRef.current?.close();
-      mediaStream?.getTracks().forEach(t => t.stop());
+      mediaStream?.getTracks().forEach((t) => t.stop());
     };
   }, [navigate]);
 
   // ───── 면접 시작 ─────
   const onStart = async () => {
-    const token = localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    const token =
+      localStorage.getItem("id_token") || localStorage.getItem("access_token");
     if (!token) return alert("로그인이 필요합니다.");
     setIsLoading(true);
 
@@ -118,11 +122,21 @@ export const InterviewSession = () => {
       // 질문 생성
       const qRes = await fetch(`${API_BASE}/generate-resume-questions/`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
       if (!qRes.ok) throw new Error(await qRes.text());
       const { questions: qs }: { questions: string[] } = await qRes.json();
-      setQuestions(qs.map((t, i) => ({ id: `${i+1}`, text: t, type: "behavioral", difficulty: "medium" })));
+      setQuestions(
+        qs.map((t, i) => ({
+          id: `${i + 1}`,
+          text: t,
+          type: "behavioral",
+          difficulty: "medium",
+        }))
+      );
 
       // 이력서 텍스트 미리 가져오기
       const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
@@ -141,8 +155,10 @@ export const InterviewSession = () => {
 
       // 전체 영상 녹화 시작
       if (streamRef.current) {
-        mediaRecorderRef.current = new MediaRecorder(streamRef.current, { mimeType: "video/webm" });
-        mediaRecorderRef.current.ondataavailable = ev => {
+        mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
+          mimeType: "video/webm",
+        });
+        mediaRecorderRef.current.ondataavailable = (ev) => {
           if (ev.data.size > 0) fullVideoChunksRef.current.push(ev.data);
         };
         mediaRecorderRef.current.start();
@@ -156,38 +172,49 @@ export const InterviewSession = () => {
   };
 
   // ───── 꼬리 질문 API 호출 함수 ─────
-  const decideFollowup = async (userAnswer: string, questionIndex: number): Promise<boolean> => {
-    const token = localStorage.getItem("id_token") || localStorage.getItem("access_token");
+  const decideFollowup = async (
+    userAnswer: string,
+    questionIndex: number
+  ): Promise<boolean> => {
+    const token =
+      localStorage.getItem("id_token") || localStorage.getItem("access_token");
     if (!token || !resumeRef.current) return false;
 
     const payload = {
-      resume_text:               resumeRef.current,
-      user_answer:               userAnswer.trim(),
-      base_question_number:      parseInt(questions[questionIndex].id, 10),
-      interview_id:              videoId,
-      existing_question_numbers: questions.map(q => q.id),
+      resume_text: resumeRef.current,
+      user_answer: userAnswer.trim(),
+      base_question_number: parseInt(questions[questionIndex].id, 10),
+      interview_id: videoId,
+      existing_question_numbers: questions.map((q) => q.id),
     };
 
     const res = await fetch(`${API_BASE}/followup/check/`, {
-      method:  'POST',
+      method: "POST",
       headers: {
-        'Content-Type':  'application/json',
-        Authorization:   `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      console.error('▶ follow-up check failed:', res.status, await res.text());
+      console.error("▶ follow-up check failed:", res.status, await res.text());
       return false;
     }
     const data = await res.json();
     if (data.followup && data.question) {
-      const baseId    = questions[questionIndex].id.split('-')[0];
-      const suffixCnt = questions.filter(q => q.id.startsWith(baseId + '-')).length;
-      const newId     = `${baseId}-${suffixCnt + 1}`;
-      setQuestions(prev => [
+      const baseId = questions[questionIndex].id.split("-")[0];
+      const suffixCnt = questions.filter((q) =>
+        q.id.startsWith(baseId + "-")
+      ).length;
+      const newId = `${baseId}-${suffixCnt + 1}`;
+      setQuestions((prev) => [
         ...prev.slice(0, questionIndex + 1),
-        { id: newId, text: data.question, type: 'behavioral', difficulty: 'medium' },
+        {
+          id: newId,
+          text: data.question,
+          type: "behavioral",
+          difficulty: "medium",
+        },
         ...prev.slice(questionIndex + 1),
       ]);
       return true;
@@ -209,7 +236,8 @@ export const InterviewSession = () => {
     setIsRecording(true);
     setIsPreparing(false);
 
-    const token = localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    const token =
+      localStorage.getItem("id_token") || localStorage.getItem("access_token");
     const ws = new WebSocket(
       `ws://localhost:8001/ws/transcribe?email=${userEmail}&question_id=${questions[qIdx].id}&token=${token}`
     );
@@ -222,7 +250,7 @@ export const InterviewSession = () => {
       const source = audioCtx.createMediaStreamSource(streamRef.current!);
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
-      processor.onaudioprocess = e => {
+      processor.onaudioprocess = (e) => {
         const floatData = e.inputBuffer.getChannelData(0);
         ws.send(convertFloat32ToInt16(floatData));
         audioChunksRef.current.push(new Float32Array(floatData));
@@ -231,7 +259,7 @@ export const InterviewSession = () => {
       processor.connect(audioCtx.destination);
 
       recordTimerRef.current = window.setInterval(() => {
-        setRecordTime(prev => Math.min(prev + 1, MAX_ANSWER_DURATION));
+        setRecordTime((prev) => Math.min(prev + 1, MAX_ANSWER_DURATION));
       }, 1000);
 
       timeoutRef.current = window.setTimeout(async () => {
@@ -241,11 +269,12 @@ export const InterviewSession = () => {
       }, MAX_ANSWER_DURATION * 1000);
     };
 
-    ws.onmessage = ev => {
+    ws.onmessage = (ev) => {
       const data = JSON.parse(ev.data);
-      if (data.transcript) setTranscript(prev => prev + data.transcript + "\n");
+      if (data.transcript)
+        setTranscript((prev) => prev + data.transcript + "\n");
     };
-    ws.onerror = e => console.error("WebSocket 오류", e);
+    ws.onerror = (e) => console.error("WebSocket 오류", e);
     ws.onclose = () => console.log("WebSocket 종료");
   };
 
@@ -258,12 +287,13 @@ export const InterviewSession = () => {
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(new TextEncoder().encode("END"));
-      await new Promise(res => setTimeout(res, 300));
+      await new Promise((res) => setTimeout(res, 300));
       wsRef.current.close();
     }
     processorRef.current?.disconnect();
 
-    const token = localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    const token =
+      localStorage.getItem("id_token") || localStorage.getItem("access_token");
     const wavBlob = encodeWAV(
       audioChunksRef.current.reduce((acc, cur) => {
         const tmp = new Float32Array(acc.length + cur.length);
@@ -274,7 +304,10 @@ export const InterviewSession = () => {
       16000
     );
     const form = new FormData();
-    form.append("audio", new File([wavBlob], "answer.wav", { type: "audio/wav" }));
+    form.append(
+      "audio",
+      new File([wavBlob], "answer.wav", { type: "audio/wav" })
+    );
     form.append("transcript", new Blob([transcript], { type: "text/plain" }));
     form.append("email", userEmail);
     form.append("question_id", questions[qIdx].id);
@@ -300,7 +333,9 @@ export const InterviewSession = () => {
       setClipsLoading(true);
       recorder.onstop = async () => {
         try {
-          const fullBlob = new Blob(fullVideoChunksRef.current, { type: "video/webm" });
+          const fullBlob = new Blob(fullVideoChunksRef.current, {
+            type: "video/webm",
+          });
           const vf = new FormData();
           vf.append("video", fullBlob, `${videoId}.webm`);
           vf.append("videoId", videoId);
@@ -319,7 +354,11 @@ export const InterviewSession = () => {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ videoId, segments: segmentsRef.current, video_path }),
+            body: JSON.stringify({
+              videoId,
+              segments: segmentsRef.current,
+              video_path,
+            }),
           });
 
           const r2 = await fetch(`${API_BASE}/analyze-voice/`, {
@@ -328,14 +367,21 @@ export const InterviewSession = () => {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ video_id: videoId, posture_count: countsRef.current }),
+            body: JSON.stringify({
+              video_id: videoId,
+              posture_count: countsRef.current,
+            }),
           });
           if (!r2.ok) throw new Error("분석 API 실패");
           const { analysis } = await r2.json();
           setClipsLoading(false);
 
           navigate("/interview/feedback", {
-            state: { upload_id: videoId, segments: segmentsRef.current, analysis },
+            state: {
+              upload_id: videoId,
+              segments: segmentsRef.current,
+              analysis,
+            },
           });
         } catch (e) {
           console.error(e);
@@ -351,7 +397,7 @@ export const InterviewSession = () => {
   const handleNext = async () => {
     if (isRecording) await stopRecording();
     if (qIdx < questions.length - 1) {
-      setQIdx(prev => prev + 1);
+      setQIdx((prev) => prev + 1);
       setTranscript("");
       audioChunksRef.current = [];
     } else {
@@ -365,16 +411,27 @@ export const InterviewSession = () => {
         {/* 비디오 + 자세 영역 */}
         <div className="md:col-span-2">
           <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+            />
             <div className="absolute top-4 left-4 flex flex-col items-start space-y-2 bg-black bg-opacity-50 px-3 py-2 rounded-lg">
               <div>
                 <span className="text-xs mr-2">마이크 상태:</span>
-                <span className={micConnected ? "text-green-400" : "text-red-400"}>
+                <span
+                  className={micConnected ? "text-green-400" : "text-red-400"}
+                >
                   {micConnected ? "연결됨" : "미연결"}
                 </span>
               </div>
               <div className="w-32 h-2 bg-gray-600 rounded overflow-hidden">
-                <div className="h-full bg-green-400" style={{ width: `${micLevel}%` }} />
+                <div
+                  className="h-full bg-green-400"
+                  style={{ width: `${micLevel}%` }}
+                />
               </div>
             </div>
           </div>
@@ -385,28 +442,82 @@ export const InterviewSession = () => {
           {!isInterviewActive ? (
             <div className="bg-gray-800 p-6 rounded-lg">
               <h2 className="text-xl font-semibold mb-4">면접 준비</h2>
-              <p className="text-gray-400 mb-6">이력서 기반 질문을 생성하고 녹음을 준비합니다.</p>
-              <Button onClick={onStart} className="w-full" size="lg" disabled={isLoading || !micConnected} isLoading={isLoading}>
+              <p className="text-gray-400 mb-6">
+                이력서 기반 질문을 생성하고 녹음을 준비합니다.
+              </p>
+
+              {/* ✅ 난이도 선택 추가 */}
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-gray-300 mb-2">
+                  질문 난이도 선택
+                </h3>
+                <div className="flex gap-2">
+                  {["쉬움", "중간", "어려움"].map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => setDifficulty(level)}
+                      className={`px-4 py-1 rounded-full text-sm border transition ${
+                        difficulty === level
+                          ? "bg-purple-600 text-white font-semibold"
+                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Button
+                onClick={onStart}
+                className="w-full"
+                size="lg"
+                disabled={isLoading || !micConnected}
+                isLoading={isLoading}
+              >
                 AI 면접 시작하기
               </Button>
             </div>
           ) : isPreparing ? (
             <div className="bg-gray-800 p-6 rounded-lg flex flex-col items-center space-y-4">
               <p className="text-gray-300">다음 질문 준비 중…</p>
-              <svg className="w-10 h-10 animate-spin text-primary" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              <svg
+                className="w-10 h-10 animate-spin text-primary"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v8H4z"
+                />
               </svg>
             </div>
           ) : (
             <div className="bg-gray-800 p-6 rounded-lg">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium">현재 질문</h3>
-                <span className="text-sm text-gray-400">{qIdx + 1}/{questions.length}</span>
+                <span className="text-sm text-gray-400">
+                  {qIdx + 1}/{questions.length}
+                </span>
               </div>
               <p className="text-gray-300">{questions[qIdx]?.text}</p>
-              <p className="mt-4 text-sm text-gray-400">남은 답변 시간: {MAX_ANSWER_DURATION - recordTime}초</p>
-              <Button variant="outline" className="w-full mt-4" onClick={handleNext} disabled={isLoading}>
+              <p className="mt-4 text-sm text-gray-400">
+                남은 답변 시간: {MAX_ANSWER_DURATION - recordTime}초
+              </p>
+              <Button
+                variant="outline"
+                className="w-full mt-4"
+                onClick={handleNext}
+                disabled={isLoading}
+              >
                 {qIdx < questions.length - 1 ? "다음 질문" : "면접 종료"}
               </Button>
             </div>
@@ -417,10 +528,26 @@ export const InterviewSession = () => {
       {(isLoading || clipsLoading) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 text-center max-w-xs mx-4 space-y-4">
-            <h3 className="text-gray-900 text-lg font-semibold">{isLoading ? "처리 중..." : "피드백 생성 중..."}</h3>
-            <svg className="mx-auto w-12 h-12 animate-spin text-primary" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            <h3 className="text-gray-900 text-lg font-semibold">
+              {isLoading ? "처리 중..." : "피드백 생성 중..."}
+            </h3>
+            <svg
+              className="mx-auto w-12 h-12 animate-spin text-primary"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              />
             </svg>
           </div>
         </div>
