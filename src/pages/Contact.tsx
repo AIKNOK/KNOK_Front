@@ -7,17 +7,38 @@ const Contact: React.FC = () => {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    // TODO: 백엔드 API로 문의 내용을 전송하는 로직을 여기에 추가하세요.
-    console.log({ name, email, message });
-    alert("문의가 정상적으로 접수되었습니다.");
 
-    // 폼 초기화
-    setName("");
-    setEmail("");
-    setMessage("");
+    try {
+      const response = await fetch("/api/contact/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          message,
+        }),
+      });
+
+      if (response.ok) {
+        alert("문의가 정상적으로 접수되었습니다.");
+        // 폼 초기화
+        setName("");
+        setEmail("");
+        setMessage("");
+      } else {
+        const err = await response.json();
+        alert("전송 실패: " + (err?.error || "서버 오류"));
+      }
+    } catch (error) {
+      console.error("에러 발생:", error);
+      alert("알 수 없는 오류가 발생했습니다.");
+    }
   };
+
 
   return (
     <div className="min-h-screen bg-white pt-[92px]">
