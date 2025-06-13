@@ -37,7 +37,9 @@ export const InterviewSession = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [clipsLoading, setClipsLoading] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
-  const [difficulty, setDifficulty] = useState("중간");
+  const [difficulty, setDifficulty] = useState<"쉬움" | "중간" | "어려움">(
+    "중간"
+  );
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioChunksRef = useRef<Float32Array[]>([]);
@@ -126,6 +128,9 @@ export const InterviewSession = () => {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          difficulty, // 👈 선택된 난이도 전달
+        }),
       });
       if (!qRes.ok) throw new Error(await qRes.text());
       const { questions: qs }: { questions: string[] } = await qRes.json();
@@ -455,12 +460,16 @@ export const InterviewSession = () => {
                   {["쉬움", "중간", "어려움"].map((level) => (
                     <button
                       key={level}
-                      onClick={() => setDifficulty(level)}
-                      className={`px-4 py-1 rounded-full text-sm border transition ${
-                        difficulty === level
-                          ? "bg-purple-600 text-white font-semibold"
-                          : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                      }`}
+                      onClick={() =>
+                        setDifficulty(level as "쉬움" | "중간" | "어려움")
+                      }
+                      className={`px-4 py-1 w-16 rounded-full text-sm border text-center transition
+                        ${
+                          difficulty === level
+                            ? "bg-purple-600 text-white border-transparent font-semibold"
+                            : "bg-transparent text-gray-300 border-gray-400 hover:bg-gray-600"
+                        }
+                      `}
                     >
                       {level}
                     </button>
