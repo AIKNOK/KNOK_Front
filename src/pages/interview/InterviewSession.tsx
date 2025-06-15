@@ -243,6 +243,7 @@ export const InterviewSession = () => {
 
     ws.onmessage = ev => {
       const data = JSON.parse(ev.data);
+      console.log("🟡 ws.onmessage: ", data);
       if (data.transcript) setTranscript(prev => prev + data.transcript + "\n");
     };
     ws.onerror = e => console.error("WebSocket 오류", e);
@@ -285,12 +286,15 @@ export const InterviewSession = () => {
     }).catch(console.error);
 
     if (transcript.trim().length > 0) {
+      console.log("🟢 꼬리질문 API 호출!");
       try {
         await decideFollowup(transcript, qIdx);
       } catch (err) {
         console.error("꼬리 질문 결정 실패:", err);
         alert("꼬리 질문 결정 중 오류가 발생했습니다.");
       }
+    } else {
+      console.warn("🟡 꼬리질문 없음: 답변이 비어있음");
     }
     setIsPreparing(false);
 

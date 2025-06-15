@@ -1,12 +1,19 @@
 // src/contexts/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from 'react';
 
 interface AuthContextValue {
   token: string | null;
   login: (token: string) => void;
   logout: () => void;
   isAuthenticated: boolean;
+  isLoading: boolean;
 }
 
 interface AuthProviderProps {
@@ -18,36 +25,38 @@ const AuthContext = createContext<AuthContextValue>({
   login: () => {},
   logout: () => {},
   isAuthenticated: false,
+  isLoading: true,
 });
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 앱 시작 시 localStorage에서 ID 토큰 또는 Access 토큰 순으로 불러오기
+  // 앱 시작 시 localStorage에서 토큰 복원
   useEffect(() => {
-    const saved = localStorage.getItem('id_token') || localStorage.getItem('access_token');
-    if (saved) {
-      setToken(saved);
-    }
+    const checkToken = async () => {
+      const savedToken = localStorage.getItem('id_token') || localStorage.getItem('access_token');
+      if (savedToken) {
+        // 토큰이 존재하면 인증된 것으로 간주
+        setToken(savedToken);
+      }
+      setIsLoading(false);
+    };
+    
+    checkToken();
   }, []);
 
-  // 로그인 시 ID 토큰으로 저장 및 페이지 이동
   const login = (newToken: string) => {
-    // ID 토큰을 우선 저장
     localStorage.setItem('id_token', newToken);
-    // (기존 호환을 위해 access_token도 저장)
     localStorage.setItem('access_token', newToken);
     setToken(newToken);
-    navigate('/mypage');
   };
 
-  // 로그아웃 시 토큰 제거 및 로그인 페이지로 이동
   const logout = () => {
     localStorage.removeItem('id_token');
     localStorage.removeItem('access_token');
+    localStorage.removeItem('user_email');
     setToken(null);
-    navigate('/login');
   };
 
   return (
@@ -57,6 +66,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         login,
         logout,
         isAuthenticated: !!token,
+        isLoading,
       }}
     >
       {children}
@@ -64,5 +74,4 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   );
 };
 
-// 훅 형태로 사용
 export const useAuth = () => useContext(AuthContext);

@@ -107,7 +107,7 @@ export const UploadResume: React.FC = () => {
   };
 
   return (
-    <Layout>
+    
       <div className="-mt-[92px] pt-[92px] bg-white min-h-screen px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto">
           {/* 페이지 타이틀 */}
@@ -221,7 +221,7 @@ export const UploadResume: React.FC = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    
   );
 };
 
