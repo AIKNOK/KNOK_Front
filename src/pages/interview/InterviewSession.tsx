@@ -9,12 +9,16 @@ interface Question {
   text: string;
   type: "technical" | "behavioral";
   difficulty: "easy" | "medium" | "hard";
+  audio_url?: string; // S3에서 가져온 오디오 URL
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const MAX_ANSWER_DURATION = 90;
 const userEmail = localStorage.getItem("user_email") || "anonymous";
 const videoId = `interview_${userEmail}_${Date.now()}`;
+
+// S3 버킷 기본 URL
+const S3_BASE_URL = "https://knok-tts.s3.ap-northeast-2.amazonaws.com/test-tts/";
 
 export const InterviewSession = () => {
   const navigate = useNavigate();
@@ -24,6 +28,7 @@ export const InterviewSession = () => {
   const fullVideoChunksRef = useRef<Blob[]>([]);
   const videoPathRef = useRef<string | null>(null);
   const resumeRef = useRef<string>("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [micConnected, setMicConnected] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
@@ -40,6 +45,7 @@ export const InterviewSession = () => {
   const [difficulty, setDifficulty] = useState<"쉬움" | "중간" | "어려움">(
     "중간"
   );
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioChunksRef = useRef<Float32Array[]>([]);
@@ -121,37 +127,50 @@ export const InterviewSession = () => {
     setIsLoading(true);
 
     try {
-      // 질문 생성
-      const qRes = await fetch(`${API_BASE}/generate-resume-questions/`, {
-        method: "POST",
+      // S3 버킷에서 질문 가져오기 - 백엔드 URL 수정 (언더스코어 사용)
+      const qRes = await fetch(`${API_BASE}/get_all_questions`, {
+        method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          difficulty, // 👈 선택된 난이도 전달
-        }),
       });
+      
       if (!qRes.ok) throw new Error(await qRes.text());
-      const { questions: qs }: { questions: string[] } = await qRes.json();
-      setQuestions(
-        qs.map((t, i) => ({
-          id: `${i + 1}`,
-          text: t,
-          type: "behavioral",
-          difficulty: "medium",
-        }))
-      );
-
-      // 이력서 텍스트 미리 가져오기
-      const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+      const { questions: questionMap } = await qRes.json();
+      
+      // 질문 데이터 설정 - 질문 번호에 맞는 오디오 URL 매핑
+      const questionList = Object.entries(questionMap).map(([id, text]) => {
+        // 질문 ID에서 숫자 부분 추출 (예: "1", "2", "3-1" 등)
+        const questionNumber = id.split('-')[0]; // 꼬리 질문의 경우 첫 번호만 사용
+        
+        // 오디오 URL 생성
+        const audioUrl = `${S3_BASE_URL}${questionNumber}.wav`;
+        
+        return {
+          id,
+          text: text as string,
+          type: "behavioral" as const,
+          difficulty: "medium" as const,
+          audio_url: audioUrl
+        };
       });
-      if (rRes.ok) {
-        const { resume_text } = await rRes.json();
-        setResumeText(resume_text || "");
-        resumeRef.current = resume_text || "";
+      
+      setQuestions(questionList);
+      console.log("질문별 오디오 URL이 매핑된 질문:", questionList);
+
+      // 이력서 텍스트 미리 가져오기 (오류 처리 추가)
+      try {
+        const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (rRes.ok) {
+          const { resume_text } = await rRes.json();
+          setResumeText(resume_text || "");
+          resumeRef.current = resume_text || "";
+        }
+      } catch (resumeError) {
+        console.error("이력서 텍스트 가져오기 실패:", resumeError);
       }
 
       // 질문 인덱스 초기화 및 면접 활성화
@@ -212,6 +231,10 @@ export const InterviewSession = () => {
         q.id.startsWith(baseId + "-")
       ).length;
       const newId = `${baseId}-${suffixCnt + 1}`;
+      
+      // 꼬리 질문에도 기본 질문과 동일한 오디오 URL 사용
+      const audioUrl = `${S3_BASE_URL}${baseId}.wav`;
+      
       setQuestions((prev) => [
         ...prev.slice(0, questionIndex + 1),
         {
@@ -219,6 +242,7 @@ export const InterviewSession = () => {
           text: data.question,
           type: "behavioral",
           difficulty: "medium",
+          audio_url: audioUrl,
         },
         ...prev.slice(questionIndex + 1),
       ]);
@@ -229,9 +253,93 @@ export const InterviewSession = () => {
 
   // ───── 질문 인덱스 변경 시 녹음 시작 ─────
   useEffect(() => {
-    if (isInterviewActive) startRecording();
+    if (isInterviewActive && questions[qIdx]) {
+      // 질문 음성 재생
+      playQuestionAudio();
+    }
     // eslint-disable-next-line
-  }, [isInterviewActive, qIdx]);
+  }, [isInterviewActive, qIdx, questions]);
+
+  // ───── 질문 음성 재생 ─────
+  const playQuestionAudio = async () => {
+    if (!questions[qIdx]) return;
+    
+    try {
+      setIsPlayingAudio(true);
+      
+      // 이전 오디오가 있으면 정지
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      
+      // S3에 저장된 오디오 URL이 있으면 사용
+      if (questions[qIdx].audio_url) {
+        const audioUrl = questions[qIdx].audio_url;
+        console.log("사용할 오디오 URL:", audioUrl);
+        
+        try {
+          // 먼저 fetch로 오디오 파일을 가져옴
+          const response = await fetch(audioUrl);
+          if (!response.ok) {
+            throw new Error(`오디오 fetch 실패: ${response.status}`);
+          }
+          
+          // 응답을 Blob으로 변환
+          const blob = await response.blob();
+          
+          // Blob URL 생성
+          const blobUrl = URL.createObjectURL(blob);
+          
+          // audio 요소가 없으면 생성
+          if (!audioRef.current) {
+            const audioElement = document.createElement('audio');
+            document.body.appendChild(audioElement);
+            audioRef.current = audioElement;
+          }
+          
+          // 오디오 요소 설정
+          audioRef.current.src = blobUrl;
+          
+          // 이벤트 리스너 설정
+          audioRef.current.onended = () => {
+            console.log("✅ 오디오 재생 완료");
+            setIsPlayingAudio(false);
+            startRecording();
+            
+            // Blob URL 해제
+            URL.revokeObjectURL(blobUrl);
+          };
+          
+          audioRef.current.onerror = (e) => {
+            console.error("❌ 오디오 재생 오류:", e);
+            setIsPlayingAudio(false);
+            startRecording();
+            
+            // Blob URL 해제
+            URL.revokeObjectURL(blobUrl);
+          };
+          
+          // 오디오 재생
+          await audioRef.current.play();
+          console.log("✅ 오디오 재생 시작");
+          
+        } catch (fetchError) {
+          console.error("❌ 오디오 파일 가져오기 실패:", fetchError);
+          setIsPlayingAudio(false);
+          startRecording();
+        }
+      } else {
+        // S3 오디오 URL이 없으면 바로 녹음 시작
+        console.log("오디오 URL이 없어 바로 녹음을 시작합니다.");
+        setIsPlayingAudio(false);
+        startRecording();
+      }
+    } catch (error) {
+      console.error("질문 음성 재생 실패:", error);
+      setIsPlayingAudio(false);
+      startRecording(); // 오류가 발생해도 녹음은 시작
+    }
+  };
 
   // ───── 녹음 시작 ─────
   const startRecording = async () => {
@@ -400,6 +508,12 @@ export const InterviewSession = () => {
 
   // ───── 다음 질문 또는 면접 종료 ─────
   const handleNext = async () => {
+    // 오디오 재생 중이면 정지
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlayingAudio(false);
+    }
+    
     if (isRecording) await stopRecording();
     if (qIdx < questions.length - 1) {
       setQIdx((prev) => prev + 1);
@@ -448,7 +562,7 @@ export const InterviewSession = () => {
             <div className="bg-gray-800 p-6 rounded-lg">
               <h2 className="text-xl font-semibold mb-4">면접 준비</h2>
               <p className="text-gray-400 mb-6">
-                이력서 기반 질문을 생성하고 녹음을 준비합니다.
+                이력서 기반 질문을 가져오고 녹음을 준비합니다.
               </p>
 
               {/* ✅ 난이도 선택 추가 */}
@@ -518,14 +632,28 @@ export const InterviewSession = () => {
                 </span>
               </div>
               <p className="text-gray-300">{questions[qIdx]?.text}</p>
-              <p className="mt-4 text-sm text-gray-400">
-                남은 답변 시간: {MAX_ANSWER_DURATION - recordTime}초
-              </p>
+              
+              {/* 음성 재생 상태 표시 */}
+              {isPlayingAudio && (
+                <div className="mt-2 flex items-center text-sm text-blue-400">
+                  <svg className="w-4 h-4 mr-1 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071a1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243a1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828a1 1 0 010-1.415z" clipRule="evenodd" />
+                  </svg>
+                  질문 음성 재생 중...
+                </div>
+              )}
+              
+              {isRecording && (
+                <p className="mt-4 text-sm text-gray-400">
+                  남은 답변 시간: {MAX_ANSWER_DURATION - recordTime}초
+                </p>
+              )}
+              
               <Button
                 variant="outline"
                 className="w-full mt-4"
                 onClick={handleNext}
-                disabled={isLoading}
+                disabled={isLoading || isPlayingAudio}
               >
                 {qIdx < questions.length - 1 ? "다음 질문" : "면접 종료"}
               </Button>
@@ -561,6 +689,9 @@ export const InterviewSession = () => {
           </div>
         </div>
       )}
+      
+      {/* 오디오 요소를 DOM에 추가 */}
+      <audio ref={audioRef} hidden />
     </div>
   );
 };
