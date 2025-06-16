@@ -1,4 +1,5 @@
-import { api } from './api';
+// src/services/auth.ts
+import { publicApi, privateApi } from './api';
 
 export interface RegisterRequest {
   email: string;
@@ -21,25 +22,29 @@ export interface EmailConfirmRequest {
 }
 
 export const authApi = {
+  // 🔓 회원가입 (공개)
   register: async (data: RegisterRequest): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>('/signup/', data);
+    const response = await publicApi.post<AuthResponse>('/signup/', data);
     return response.data;
   },
 
+  // 🔓 이메일 인증 (공개)
   confirmEmail: async (data: EmailConfirmRequest): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>('/confirm-email/', data);
+    const response = await publicApi.post<AuthResponse>('/confirm-email/', data);
     return response.data;
   },
 
+  // 🔓 로그인 (공개)
   login: async (data: LoginRequest): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>('/login/', data);
+    const response = await publicApi.post<AuthResponse>('/login/', data);
     if (response.data.token) {
       localStorage.setItem('token', response.data.token);
     }
     return response.data;
   },
 
+  // 🔐 로그아웃 (토큰 삭제)
   logout: () => {
     localStorage.removeItem('token');
   },
-}; 
+};

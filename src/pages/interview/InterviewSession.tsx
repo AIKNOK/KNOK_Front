@@ -121,79 +121,93 @@ export const InterviewSession = () => {
 
   // ───── 면접 시작 ─────
   const onStart = async () => {
-    const token =
-      localStorage.getItem("id_token") || localStorage.getItem("access_token");
-    if (!token) return alert("로그인이 필요합니다.");
-    setIsLoading(true);
+  const token =
+    localStorage.getItem("id_token") || localStorage.getItem("access_token");
+  if (!token) return alert("로그인이 필요합니다.");
+  setIsLoading(true);
 
-    try {
-      // S3 버킷에서 질문 가져오기 - 백엔드 URL 수정 (언더스코어 사용)
-      const qRes = await fetch(`${API_BASE}/get_all_questions`, {
+  try {
+    let questionMap: Record<string, string> = {};
+
+    // 1차 질문 요청
+    const qRes = await fetch(`${API_BASE}/get_all_questions`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!qRes.ok) throw new Error(await qRes.text());
+    const qJson = await qRes.json();
+    questionMap = qJson.questions;
+
+    // 질문이 없으면 generate-resume-questions 호출
+    if (!questionMap || Object.keys(questionMap).length === 0) {
+      console.log("📌 질문이 없어 질문을 생성합니다.");
+      const gRes = await fetch(`${API_BASE}/generate-resume-questions/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!gRes.ok) throw new Error(await gRes.text());
+
+      // 생성 직후 다시 질문 목록 요청
+      const retryRes = await fetch(`${API_BASE}/get_all_questions`, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      
-      if (!qRes.ok) throw new Error(await qRes.text());
-      const { questions: questionMap } = await qRes.json();
-      
-      // 질문 데이터 설정 - 질문 번호에 맞는 오디오 URL 매핑
-      const questionList = Object.entries(questionMap).map(([id, text]) => {
-        // 질문 ID에서 숫자 부분 추출 (예: "1", "2", "3-1" 등)
-        const questionNumber = id.split('-')[0]; // 꼬리 질문의 경우 첫 번호만 사용
-        
-        // 오디오 URL 생성
-        const audioUrl = `${S3_BASE_URL}${questionNumber}.wav`;
-        
-        return {
-          id,
-          text: text as string,
-          type: "behavioral" as const,
-          difficulty: "medium" as const,
-          audio_url: audioUrl
-        };
-      });
-      
-      setQuestions(questionList);
-      console.log("질문별 오디오 URL이 매핑된 질문:", questionList);
-
-      // 이력서 텍스트 미리 가져오기 (오류 처리 추가)
-      try {
-        const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (rRes.ok) {
-          const { resume_text } = await rRes.json();
-          setResumeText(resume_text || "");
-          resumeRef.current = resume_text || "";
-        }
-      } catch (resumeError) {
-        console.error("이력서 텍스트 가져오기 실패:", resumeError);
-      }
-
-      // 질문 인덱스 초기화 및 면접 활성화
-      setQIdx(0);
-      setIsInterviewActive(true);
-
-      // 전체 영상 녹화 시작
-      if (streamRef.current) {
-        mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
-          mimeType: "video/webm",
-        });
-        mediaRecorderRef.current.ondataavailable = (ev) => {
-          if (ev.data.size > 0) fullVideoChunksRef.current.push(ev.data);
-        };
-        mediaRecorderRef.current.start();
-      }
-    } catch (err) {
-      console.error("면접 시작 실패:", err);
-      alert("면접 시작 중 오류가 발생했습니다.");
-    } finally {
-      setIsLoading(false);
+      if (!retryRes.ok) throw new Error(await retryRes.text());
+      const retryJson = await retryRes.json();
+      questionMap = retryJson.questions;
     }
-  };
+
+    // 질문 데이터 설정 - 오디오 URL 매핑
+    const questionList = Object.entries(questionMap).map(([id, text]) => {
+      const questionNumber = id.split("-")[0];
+      const audioUrl = `${S3_BASE_URL}${questionNumber}.wav`;
+      return {
+        id,
+        text: text as string,
+        type: "behavioral" as const,
+        difficulty: "medium" as const,
+        audio_url: audioUrl,
+      };
+    });
+
+    setQuestions(questionList);
+    console.log("질문별 오디오 URL이 매핑된 질문:", questionList);
+
+    // 이력서 텍스트 가져오기
+    try {
+      const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (rRes.ok) {
+        const { resume_text } = await rRes.json();
+        setResumeText(resume_text || "");
+        resumeRef.current = resume_text || "";
+      }
+    } catch (resumeError) {
+      console.error("이력서 텍스트 가져오기 실패:", resumeError);
+    }
+
+    // 녹화 시작
+    setQIdx(0);
+    setIsInterviewActive(true);
+
+    if (streamRef.current) {
+      mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
+        mimeType: "video/webm",
+      });
+      mediaRecorderRef.current.ondataavailable = (ev) => {
+        if (ev.data.size > 0) fullVideoChunksRef.current.push(ev.data);
+      };
+      mediaRecorderRef.current.start();
+    }
+  } catch (err) {
+    console.error("면접 시작 실패:", err);
+    alert("면접 시작 중 오류가 발생했습니다.");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // ───── 꼬리 질문 API 호출 함수 ─────
   const decideFollowup = async (
