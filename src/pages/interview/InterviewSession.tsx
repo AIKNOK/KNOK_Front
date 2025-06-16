@@ -18,7 +18,7 @@ const userEmail = localStorage.getItem("user_email") || "anonymous";
 const videoId = `interview_${userEmail}_${Date.now()}`;
 
 // S3 버킷 기본 URL
-const S3_BASE_URL = "https://knok-tts.s3.ap-northeast-2.amazonaws.com/test-tts/";
+const S3_BASE_URL = "https://knok-tts.s3.ap-northeast-2.amazonaws.com/";
 
 export const InterviewSession = () => {
   const navigate = useNavigate();
@@ -121,93 +121,80 @@ export const InterviewSession = () => {
 
   // ───── 면접 시작 ─────
   const onStart = async () => {
-  const token =
-    localStorage.getItem("id_token") || localStorage.getItem("access_token");
-  if (!token) return alert("로그인이 필요합니다.");
-  setIsLoading(true);
+    const token =
+      localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    if (!token) return alert("로그인이 필요합니다.");
+    setIsLoading(true);
 
-  try {
-    let questionMap: Record<string, string> = {};
-
-    // 1차 질문 요청
-    const qRes = await fetch(`${API_BASE}/get_all_questions`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!qRes.ok) throw new Error(await qRes.text());
-    const qJson = await qRes.json();
-    questionMap = qJson.questions;
-
-    // 질문이 없으면 generate-resume-questions 호출
-    if (!questionMap || Object.keys(questionMap).length === 0) {
-      console.log("📌 질문이 없어 질문을 생성합니다.");
-      const gRes = await fetch(`${API_BASE}/generate-resume-questions/`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!gRes.ok) throw new Error(await gRes.text());
-
-      // 생성 직후 다시 질문 목록 요청
-      const retryRes = await fetch(`${API_BASE}/get_all_questions`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!retryRes.ok) throw new Error(await retryRes.text());
-      const retryJson = await retryRes.json();
-      questionMap = retryJson.questions;
-    }
-
-    // 질문 데이터 설정 - 오디오 URL 매핑
-    const questionList = Object.entries(questionMap).map(([id, text]) => {
-      const questionNumber = id.split("-")[0];
-      const audioUrl = `${S3_BASE_URL}${questionNumber}.wav`;
-      return {
-        id,
-        text: text as string,
-        type: "behavioral" as const,
-        difficulty: "medium" as const,
-        audio_url: audioUrl,
-      };
-    });
-
-    setQuestions(questionList);
-    console.log("질문별 오디오 URL이 매핑된 질문:", questionList);
-
-    // 이력서 텍스트 가져오기
     try {
-      const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
+      // S3 버킷에서 질문 가져오기
+      const qRes = await fetch(`${API_BASE}/get_all_questions`, {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
-      if (rRes.ok) {
-        const { resume_text } = await rRes.json();
-        setResumeText(resume_text || "");
-        resumeRef.current = resume_text || "";
+      
+      if (!qRes.ok) throw new Error(await qRes.text());
+      const { questions: questionMap } = await qRes.json();
+      
+      // 사용자 이메일 가져오기
+      const email = userEmail.split('@')[0]; // 이메일에서 @ 앞부분만 추출
+      
+      // 질문 데이터 설정 및 오디오 URL 매핑
+      const questionList = Object.entries(questionMap).map(([id, text]) => {
+        // 오디오 URL 생성 - 사용자 이름 폴더 아래의 "질문1.wav", "질문2.wav" 형식
+        // 꼬리 질문도 "질문2-1.wav" 형식으로 저장됨
+        const audioUrl = `${S3_BASE_URL}${email}/질문${id}.wav`;
+        
+        return {
+          id,
+          text: text as string,
+          type: "behavioral" as const,
+          difficulty: "medium" as const,
+          audio_url: audioUrl
+        };
+      });
+      
+      setQuestions(questionList);
+      console.log("질문별 오디오 URL이 매핑된 질문:", questionList);
+
+      // 이력서 텍스트 미리 가져오기 (오류 처리 추가)
+      try {
+        const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (rRes.ok) {
+          const { resume_text } = await rRes.json();
+          setResumeText(resume_text || "");
+          resumeRef.current = resume_text || "";
+        }
+      } catch (resumeError) {
+        console.error("이력서 텍스트 가져오기 실패:", resumeError);
       }
-    } catch (resumeError) {
-      console.error("이력서 텍스트 가져오기 실패:", resumeError);
-    }
 
-    // 녹화 시작
-    setQIdx(0);
-    setIsInterviewActive(true);
+      // 질문 인덱스 초기화 및 면접 활성화
+      setQIdx(0);
+      setIsInterviewActive(true);
 
-    if (streamRef.current) {
-      mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
-        mimeType: "video/webm",
-      });
-      mediaRecorderRef.current.ondataavailable = (ev) => {
-        if (ev.data.size > 0) fullVideoChunksRef.current.push(ev.data);
-      };
-      mediaRecorderRef.current.start();
+      // 전체 영상 녹화 시작
+      if (streamRef.current) {
+        mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
+          mimeType: "video/webm",
+        });
+        mediaRecorderRef.current.ondataavailable = (ev) => {
+          if (ev.data.size > 0) fullVideoChunksRef.current.push(ev.data);
+        };
+        mediaRecorderRef.current.start();
+      }
+    } catch (err) {
+      console.error("면접 시작 실패:", err);
+      alert("면접 시작 중 오류가 발생했습니다.");
+    } finally {
+      setIsLoading(false);
     }
-  } catch (err) {
-    console.error("면접 시작 실패:", err);
-    alert("면접 시작 중 오류가 발생했습니다.");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   // ───── 꼬리 질문 API 호출 함수 ─────
   const decideFollowup = async (
@@ -246,8 +233,9 @@ export const InterviewSession = () => {
       ).length;
       const newId = `${baseId}-${suffixCnt + 1}`;
       
-      // 꼬리 질문에도 기본 질문과 동일한 오디오 URL 사용
-      const audioUrl = `${S3_BASE_URL}${baseId}.wav`;
+      // 꼬리 질문에 대한 고유한 오디오 URL 사용
+      const email = userEmail.split('@')[0];
+      const audioUrl = `${S3_BASE_URL}${email}/질문${newId}.wav`;
       
       setQuestions((prev) => [
         ...prev.slice(0, questionIndex + 1),
