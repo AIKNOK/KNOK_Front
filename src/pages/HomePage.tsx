@@ -118,94 +118,11 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Testimonials Section */}
-      <section className="py-24 bg-white">
-        <div className="container mx-auto px-4">
-          <h2 className="text-[#000000] text-4xl font-medium tracking-tighter mb-16">
-            What our great customers say
-          </h2>
-          <div className="bg-[#e1dbf6] rounded-lg p-8">
-            <div className="flex flex-col md:flex-row gap-16">
-              <div className="w-[267px] h-[267px] rounded-full overflow-hidden">
-                <img
-                  src="/ellipse-6@2x.png"
-                  alt="고객 사진"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="flex-1">
-                <p className="text-[#0f0f0f] text-2xl font-medium leading-relaxed mb-12">
-                  Waves demonstrates an excellent understanding of user needs and all
-                  of their designs are creative and elegant in their simplicity.
-                </p>
-                <h3 className="text-[#8447e9] text-base font-medium mb-1">
-                  Jerome Bell
-                </h3>
-                <p className="text-[#0f0f0f] text-xs">
-                  <span className="font-medium">President of Sales</span>
-                  <span className="ml-2">(Binford Ltd.)</span>
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      
 
-      {/* News Section */}
-      <section className="py-24 bg-white">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-semibold text-[#0f0f0f] mb-12">
-            News & Insights
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[1, 2, 3].map((n) => (
-              <div key={n} className="bg-white shadow-lg rounded-lg overflow-hidden">
-                <img
-                  src={`/news${n}.jpg`}
-                  alt={`News ${n}`}
-                  className="w-full h-48 object-cover"
-                />
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold mb-2">News Title {n}</h3>
-                  <p className="text-gray-600 text-sm mb-4">
-                    짧은 요약 텍스트가 여기에 들어갑니다...
-                  </p>
-                  <Link to={`/news/${n}`}>
-                    <span className="text-[#8447e9] font-medium hover:underline">
-                      Read more →
-                    </span>
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      
 
-      {/* Explore All News 버튼 */}
-      <div className="mt-12 pl-4">
-        <Button variant="outline" size="md">Explore all news →</Button>
-      </div>
-
-      {/* CTA Section */}
-      <section className="py-24">
-        <div className="container mx-auto px-4">
-          <div
-            className="relative h-[385px] rounded-lg overflow-hidden bg-cover bg-center"
-            style={{ backgroundImage: "url('/frame-17@3x.png')" }}
-          >
-            <div className="absolute inset-0 bg-black/70"></div>
-            <div className="relative z-10 h-full flex flex-col items-center justify-center">
-              <h2 className="text-white text-[62px] font-medium tracking-tighter mb-8">
-                Ready for your project
-              </h2>
-              <Button variant="primary" size="lg" className="text-2xl py-5">
-                Get in touch
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+      
     </>
   );
 };
