@@ -1,5 +1,6 @@
 // src/App.tsx
 import React from "react";
+import "./styles/globals.css";
 import { Routes, Route } from "react-router-dom";
 
 import Header from "./components/layout/Header";

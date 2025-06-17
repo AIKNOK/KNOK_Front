@@ -37,6 +37,7 @@ export const InterviewSession = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [clipsLoading, setClipsLoading] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [uploadId, setUploadId] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioChunksRef = useRef<Float32Array[]>([]);
@@ -224,14 +225,20 @@ export const InterviewSession = () => {
       processorRef.current = processor;
       processor.onaudioprocess = e => {
         const floatData = e.inputBuffer.getChannelData(0);
-        ws.send(convertFloat32ToInt16(floatData));
+        const pcmData = convertFloat32ToInt16(floatData);
         audioChunksRef.current.push(new Float32Array(floatData));
+        if (ws.readyState === WebSocket.OPEN) ws.send(pcmData);
       };
       source.connect(processor);
       processor.connect(audioCtx.destination);
-
+      
+      setRecordTime(0);
+      setIsRecording(true);
       recordTimerRef.current = window.setInterval(() => {
-        setRecordTime(prev => Math.min(prev + 1, MAX_ANSWER_DURATION));
+        setRecordTime((prev) => {
+          if (prev + 1 >= MAX_ANSWER_DURATION) { stopRecording(); return prev; }
+            return prev + 1;
+        });
       }, 1000);
 
       timeoutRef.current = window.setTimeout(async () => {
@@ -243,6 +250,10 @@ export const InterviewSession = () => {
 
     ws.onmessage = ev => {
       const data = JSON.parse(ev.data);
+      if (data.type === 'upload_id') {
+        setUploadId(data.upload_id);
+        return;
+      }
       if (data.transcript) setTranscript(prev => prev + data.transcript + "\n");
     };
     ws.onerror = e => console.error("WebSocket 오류", e);
@@ -263,6 +274,7 @@ export const InterviewSession = () => {
     }
     processorRef.current?.disconnect();
 
+    // 녹음된 데이터로 S3 업로드 준비
     const token = localStorage.getItem("id_token") || localStorage.getItem("access_token");
     const wavBlob = encodeWAV(
       audioChunksRef.current.reduce((acc, cur) => {
@@ -278,11 +290,17 @@ export const InterviewSession = () => {
     form.append("transcript", new Blob([transcript], { type: "text/plain" }));
     form.append("email", userEmail);
     form.append("question_id", questions[qIdx].id);
-    await fetch(`${API_BASE}/audio/upload/`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-    }).catch(console.error);
+    try {
+      const uploadRes = await fetch(`${API_BASE}/audio/upload/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const uploadJson = await uploadRes.json();
+      console.log("✅ S3 업로드 완료", uploadJson);
+    } catch (err) {
+      console.error("❌ 업로드 실패", err);
+    }
 
     if (transcript.trim().length > 0) {
       try {
@@ -300,6 +318,7 @@ export const InterviewSession = () => {
       setClipsLoading(true);
       recorder.onstop = async () => {
         try {
+          // 전체 영상 업로드
           const fullBlob = new Blob(fullVideoChunksRef.current, { type: "video/webm" });
           const vf = new FormData();
           vf.append("video", fullBlob, `${videoId}.webm`);
@@ -313,27 +332,37 @@ export const InterviewSession = () => {
           const { video_path } = await r1.json();
           videoPathRef.current = video_path;
 
+          const payload = {
+            videoId,                           // CamelCase
+            segments: segmentsRef.current,     // [{ start, end }, …]
+            feedbacks: segmentsRef.current.map(() => ""),  // 일단 빈 문자열 배열로 채움
+          };
+          console.log("▶ extract-clips payload:", payload);
+          
+          // 클립 추출
           await fetch(`${API_BASE}/video/extract-clips/`, {
             method: "POST",
             headers: {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ videoId, segments: segmentsRef.current, video_path }),
+            body: JSON.stringify( payload ),
           });
 
+          // 분석
           const r2 = await fetch(`${API_BASE}/analyze-voice/`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ video_id: videoId, posture_count: countsRef.current }),
+            body: JSON.stringify({ upload_id: uploadId, posture_count: countsRef.current, }),
           });
           if (!r2.ok) throw new Error("분석 API 실패");
           const { analysis } = await r2.json();
           setClipsLoading(false);
 
+          // 피드백 페이지로 이동
           navigate("/interview/feedback", {
             state: { upload_id: videoId, segments: segmentsRef.current, analysis },
           });
@@ -349,13 +378,39 @@ export const InterviewSession = () => {
 
   // ───── 다음 질문 또는 면접 종료 ─────
   const handleNext = async () => {
-    if (isRecording) await stopRecording();
+    // ① 토큰 선언
+    const token = localStorage.getItem("id_token")
+                || localStorage.getItem("access_token");
+    if (!token) {
+      alert("로그인이 필요합니다.");
+      return;
+    }
+    console.log("▶ handleNext() 호출됨, isRecording:", isRecording);
+    if (isRecording) {
+      console.log("▶ stopRecording() 호출 전");
+      await stopRecording();
+      console.log("▶ stopRecording() 호출 완료");
+    }
+    // 녹음이 완전히 멈췄으면, 질문 인덱스를 증가시키고
     if (qIdx < questions.length - 1) {
       setQIdx(prev => prev + 1);
       setTranscript("");
       audioChunksRef.current = [];
     } else {
-      // 면접 종료 처리…
+      // 마지막 질문까지 끝났으면 면접 종료 플래그
+      setIsInterviewActive(false);
+
+      // posture 전송 + 분석 → 피드백 화면
+      await fetch(`${API_BASE}/posture/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoId,
+          counts:   countsRef.current,
+          segments: segmentsRef.current,
+        }),
+      });
+      mediaRecorderRef.current?.stop();
     }
   };
 

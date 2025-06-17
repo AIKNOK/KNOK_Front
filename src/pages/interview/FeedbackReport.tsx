@@ -40,65 +40,111 @@ interface FeedbackResponse {
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 const FeedbackReport: React.FC = () => {
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
-  const location = useLocation();
-  const { analysis, upload_id, email_prefix } = (location.state ?? {}) as {
-    analysis: any;
-    upload_id: string;
-    email_prefix?: string;
-  };
+  // PDF 업로드 완료를 추적
+  const [isPdfUploaded, setIsPdfUploaded] = useState(false);
 
+  // ZIP 다운로드용
   const reportRef = useRef<HTMLDivElement>(null);
   const [feedback, setFeedback] = useState<FeedbackResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   // PDF 다운로드에 필요한 값
-  const { state } = useLocation();
-  const videoId: string = state?.videoId;
-  const segments: any[] = state?.segments;
-  const feedbackText: string = state?.feedbackText;
+  const location = useLocation();
+  const {
+    analysis,
+    upload_id,     // 이제 videoId 역할
+    email_prefix,
+    segments,
+    feedbackText,
+  } = (location.state ?? {}) as {
+    analysis: any;
+    upload_id: string;
+    email_prefix?: string;
+    segments: any[];
+    feedbackText: string;
+  };
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // 1) 피드백 생성 API 호출
-  useEffect(() => {
-    if (!analysis) return;
-    const fetchFeedback = async () => {
-      setLoading(true);
-      try {
-        const token =
-          localStorage.getItem('id_token') ||
-          localStorage.getItem('access_token') ||
-          '';
-        const res = await fetch(
-          `${API_BASE}/interview/feedback/generate/`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ analysis, email_prefix, upload_id }),
-          }
-        );
-        if (!res.ok) throw new Error(`서버 에러 ${res.status}`);
-        const data = await res.json();
-        console.log("❗️ generate_feedback_report 응답:", data);
-        setFeedback(data);
-      } catch (err) {
-        console.error('피드백 불러오기 실패:', err);
-        // 서버에서 { error, raw } 형태로 내려왔다면 feedback에 담아두고
-        setFeedback((prev) => ({ ...(prev as any), error: (err as Error).message }));
-      } finally {
-        setLoading(false);
-      }
+  // 피드백 prsighned URL 제공
+  const [clips, setClips] = useState<
+    { clipUrl: string; thumbnailUrl: string; feedback: string }[]
+  >([]);
+
+  // 차트를 이미지로 변환
+  const chartRef = useRef<any>(null);
+  const prepareChartImage = () => {
+    const chartInst = chartRef.current;
+    if (!chartInst) return;
+    const base64 = chartInst.toBase64Image();
+    const img = document.createElement('img');
+    img.src = base64;
+    img.style.width = '100%';
+    img.style.height = 'auto';
+    const container = document.getElementById('chart-container');
+    if (container) {
+      container.innerHTML = '';
+      container.appendChild(img);
+    }
+  };
+
+  // pdf 변환
+  const generatePDFBlob = async (): Promise<Blob> => {
+    if (!reportRef.current) throw new Error("리포트 DOM이 없습니다.");
+
+    const opt = {
+      margin: 0,
+      filename: 'feedback.pdf',
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] as unknown as string[] },
     };
-    fetchFeedback();
-  }, [analysis, email_prefix, upload_id]);
+
+    const pdfBlob: Blob = await html2pdf()
+      .set(opt)
+      .from(reportRef.current)
+      .outputPdf('blob');
+
+    return pdfBlob;
+  };
+  
+  // PDF 업로드
+  const handleGenerateAndUploadPDF = async () => {
+  try {
+    const blob = await generatePDFBlob();
+
+    const formData = new FormData();
+    formData.append('file', blob, 'feedback_report.pdf');
+    formData.append('videoId', upload_id);
+
+    const token =
+      localStorage.getItem('id_token') ||
+      localStorage.getItem('access_token') ||
+      '';
+
+    const res = await fetch(`${API_BASE}/upload/pdf/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    if (!res.ok) throw new Error('PDF 업로드 실패');
+
+    const data: { pdf_url: string } = await res.json();
+    setPdfUrl(data.pdf_url);
+    return data;
+  } catch (e: any) {
+    console.error('PDF 생성 또는 업로드 실패', e);
+    throw e;
+  }
+};
 
   // 2) ZIP 다운로드 핸들러
   const handleDownload = async () => {
-    if (!videoId || !segments || !feedbackText) {
-      alert('다운로드 정보가 부족합니다.');
+    if (!upload_id) {
+      alert('videoId가 필요합니다.');
       return;
     }
     setIsDownloading(true);
@@ -107,16 +153,14 @@ const FeedbackReport: React.FC = () => {
         localStorage.getItem('id_token') ||
         localStorage.getItem('access_token') ||
         '';
-      const res = await fetch(`${API_BASE}/video/extract-clips/`, {
+      const res = await fetch(`${API_BASE}/download/feedback-zip/`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          videoId,
-          segments,
-          feedback_text: feedbackText,
+          videoId:upload_id,
         }),
       });
       if (!res.ok) {
@@ -128,17 +172,102 @@ const FeedbackReport: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${videoId}_feedback.zip`;
+      a.download = `${upload_id}_feedback.zip`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
+      alert('ZIP 다운로드 완료');
     } catch (err) {
       alert('다운로드 중 에러 발생: ' + err);
     } finally {
       setIsDownloading(false);
     }
   };
+
+  // 메인 로직
+  useEffect(() => {
+    if (!analysis) return;
+    const fetchFeedback = async () => {
+      setLoading(true);
+      try {
+        // 피드백 생성
+        const token =
+          localStorage.getItem('id_token') ||
+          localStorage.getItem('access_token') ||
+          '';
+        const fRes = await fetch(
+          `${API_BASE}/interview/feedback/generate/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ analysis, email_prefix, upload_id }),
+          }
+        );
+        if (!fRes.ok) throw new Error(`서버 에러 ${fRes.status}`);
+        const data = await fRes.json();
+        console.log("❗️ generate_feedback_report 응답:", data);
+        setFeedback(data);
+
+        // 자세 문제에 따른 피드백 생성 함수 추가
+        const generatePostureFeedback = (reason: string): string => {
+          switch(reason) {
+            case 'shoulder':
+              return '어깨 자세가 바르지 않습니다. 어깨를 펴고 바른 자세를 유지하세요.';
+            case 'headDown':
+              return '고개를 숙이고 있습니다. 시선을 정면으로 유지하세요.';
+            case 'ear':
+              return '귀를 만지는 습관이 있습니다. 면접 중 불필요한 동작을 자제하세요.';
+            case 'gaze':
+              return '시선이 불안정합니다. 면접관을 바라보며 자신감 있는 태도를 보이세요.';
+            default:
+              return '자세를 바르게 유지하세요.';
+          }
+        };
+
+        // bad_posture_clips API 호출
+        const res2 = await fetch(`${API_BASE}/video/extract-clips/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            videoId: upload_id,
+            segments,
+            feedbacks: segments.map(segment => generatePostureFeedback(segment.reason)),
+          }),
+        });
+        if (!res2.ok) throw new Error('클립 불러오기 실패');
+        const json2 = await res2.json();
+        setClips(json2.clips);  // ← 클립 상태 업데이트
+
+        // 자동 PDF 생성 및 업로드
+        setTimeout(async () => {
+          try {
+            const { pdf_url } = await handleGenerateAndUploadPDF();  // ← 여기가 { url: S3_URL } 리턴하는 부분
+            setPdfUrl(pdf_url); // 저장된 S3 URL 백엔드로 다시 전달하기 위함
+            setIsPdfUploaded(true); // PDF 업로드 완료 표시
+            console.log("PDF 업로드 완료:", pdf_url);
+          } catch (e) {
+            console.error("PDF 생성 또는 업로드 실패", e);
+          }
+        }, 1000);
+      } catch (err) {
+        console.error('피드백 불러오기 실패:', err);
+        // 서버에서 { error, raw } 형태로 내려왔다면 feedback에 담아두고
+        setFeedback((prev) => ({ ...(prev as any), error: (err as Error).message }));
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFeedback();
+  }, [analysis, email_prefix, upload_id]);
+
+  
 
   if (loading) {
     return <div className="text-center p-6">피드백 로딩 중...</div>;
@@ -201,9 +330,9 @@ const FeedbackReport: React.FC = () => {
       : '/sad.png';
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-8 pt-24">
+    <div className="max-w-3xl mx-auto p-6 space-y-4 pt-12">
       <div className="text-right">
-        <Button onClick={handleDownload} disabled={isDownloading}>
+        <Button onClick={handleDownload} disabled={isDownloading || !isPdfUploaded}>
           {isDownloading ? '다운로드 중...' : 'ZIP 다운로드'}
         </Button>
       </div>
@@ -239,6 +368,7 @@ const FeedbackReport: React.FC = () => {
               면접 결과 분석
             </h2>
             <Radar
+              ref={chartRef}
               data={{
                 labels: Object.keys(chart),
                 datasets: [
@@ -259,6 +389,8 @@ const FeedbackReport: React.FC = () => {
             아직 차트 데이터가 없습니다.
           </div>
         )}
+        {/* 페이지 브레이크 */}
+        <div className="page-break">
 
         {/* 상세 분석 */}
         <div className="p-4 border rounded space-y-4">
@@ -272,7 +404,40 @@ const FeedbackReport: React.FC = () => {
             </div>
           ))}
         </div>
+        </div>
       </div>
+      {feedback?.error && (
+        <div className="text-red-500">{feedback.error}</div>
+      )}
+
+      {/* ─── ④ 썸네일 & 링크 렌더링 ─────────────────── */}
+      {clips.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-xl font-semibold mb-4">추출된 클립</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {clips.map((c, i) => (
+              <div key={i} className="border rounded-lg p-4">
+                <img
+                  src={c.thumbnailUrl}
+                  alt={`Clip ${i + 1}`}
+                  className="w-full h-auto mb-2 rounded-md"
+                />
+                <a
+                  href={c.clipUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 underline"
+                >
+                  클립 {i + 1} 보기
+                </a>
+                {c.feedback && (
+                  <p className="mt-2 text-sm text-gray-600">{c.feedback}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 };

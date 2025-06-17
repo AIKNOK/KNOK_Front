@@ -17,3 +17,10 @@
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
 } 
+
+.page-break {
+  /* html2pdf, 브라우저 인쇄 등에서 페이지 강제 분리 */
+  page-break-before: always;
+  /* 최신 CSS 인쇄 규칙도 함께 추가하면 안정적입니다 */
+  break-before: page;
+}
