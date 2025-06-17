@@ -4,6 +4,7 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: './', // ✅ S3 정적 호스팅에 반드시 필요!
   plugins: [react()],
   resolve: {
     alias: {
