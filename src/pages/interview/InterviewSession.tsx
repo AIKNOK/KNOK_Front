@@ -260,8 +260,6 @@ const onStart = async () => {
 
     console.log(`▶ followup/check 상태코드: ${res.status}`);
 
-  
-
     if (!res.ok) {
       console.error("▶ follow-up check failed:", res.status, await res.text());
       return false;
@@ -276,7 +274,7 @@ const onStart = async () => {
       
       // 꼬리 질문에 대한 오디오 URL 설정
       // 백엔드에서 TTS 생성 후 반환된 audio_url 사용
-      const audioUrl = data.audio_url || `${S3_BASE_URL}${userEmail.split('@')[0]}/${newId}.wav`;
+      const audioUrl = data.audio_url;
       
       setQuestions((prev) => [
         ...prev.slice(0, questionIndex + 1),
@@ -289,6 +287,8 @@ const onStart = async () => {
         },
         ...prev.slice(questionIndex + 1),
       ]);
+      // 즉시 다음 질문(꼬리질문)으로 이동
+      setQIdx(questionIndex + 1);
       return true;
     }
     return false;
@@ -478,15 +478,11 @@ const onStart = async () => {
       body: form,
     }).catch(console.error);
 
-    if (transcript.trim().length > 0) {
-      try {
-        await decideFollowup(transcript, qIdx);
-      } catch (err) {
-        console.error("꼬리 질문 결정 실패:", err);
-        alert("꼬리 질문 결정 중 오류가 발생했습니다.");
-      }
+    if (transcript.trim()) {
+      await decideFollowup(transcript, qIdx);
     }
     setIsPreparing(false);
+    // no need to call handleNext here; qIdx already moved if followup
 
     // ─── 전체 영상 업로드 등 나머지 로직 ───
     if (mediaRecorderRef.current && qIdx === questions.length - 1) {
