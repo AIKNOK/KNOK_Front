@@ -247,6 +247,8 @@ const onStart = async () => {
       existing_question_numbers: questions.map((q) => q.id),
     };
 
+    console.log("▶ 꼬리질문 API 호출 직전 payload:", payload);
+
     const res = await fetch(`${API_BASE}/followup/check/`, {
       method: "POST",
       headers: {
@@ -255,6 +257,11 @@ const onStart = async () => {
       },
       body: JSON.stringify(payload),
     });
+
+    console.log(`▶ followup/check 상태코드: ${res.status}`);
+
+  
+
     if (!res.ok) {
       console.error("▶ follow-up check failed:", res.status, await res.text());
       return false;
