@@ -1,12 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { Download } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Button } from "../components/shared/Button";
 
-const rawData = [
-  { date: "2025-06-07", score: 85, pdfUrl: "/pdfs/report-2025-06-07.pdf" },
-  { date: "2025-06-01", score: 72, pdfUrl: "/pdfs/report-2025-06-01.pdf" },
-];
+interface FeedbackItem {
+  created_at: string;
+  total_score: number;
+  pdf_url: string;
+}
 
 const downloadPDF = (url: string, filename: string) => {
   saveAs(url, filename);
@@ -19,38 +21,69 @@ const getFaceImg = (score: number) => {
 };
 
 const History: React.FC = () => {
-  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [data, setData] = useState<FeedbackItem[]>([]);
   const [filterDate, setFilterDate] = useState<string>("");
 
-  const sorted = [...rawData].sort((a, b) =>
-    sortOrder === "newest"
-      ? b.date.localeCompare(a.date)
-      : a.date.localeCompare(b.date)
-  );
-  const data = filterDate
-    ? sorted.filter((row) => row.date === filterDate)
-    : sorted;
+  const [sortBy, setSortBy] = useState<"created_at" | "score">("created_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const setSort = (by: "created_at" | "score", order: "asc" | "desc") => {
+    setSortBy(by);
+    setSortOrder(order);
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await axios.get(
+          `/api/feedback-history?sort=${sortBy}&order=${sortOrder}`
+        );
+        setData(res.data);
+      } catch (err) {
+        console.error("피드백 기록 조회 실패", err);
+      }
+    };
+    fetchData();
+  }, [sortBy, sortOrder]);
+
+  const filteredData = filterDate
+    ? data.filter((item) => item.created_at.slice(0, 10) === filterDate)
+    : data;
 
   return (
     <div className="max-w-3xl mx-auto py-10 px-4">
       <h1 className="text-2xl font-bold text-center mb-6">내 면접 기록</h1>
 
-      <div className="flex justify-between mb-6">
-        <div>
+      <div className="flex justify-between mb-6 flex-wrap gap-4">
+        {/* 정렬 버튼 */}
+        <div className="flex gap-2 flex-wrap">
           <Button
-            variant={sortOrder === "newest" ? "primary" : "outline"}
-            onClick={() => setSortOrder("newest")}
+            variant={sortBy === "created_at" && sortOrder === "desc" ? "primary" : "outline"}
+            onClick={() => setSort("created_at", "desc")}
           >
             최신순
           </Button>
           <Button
-            variant={sortOrder === "oldest" ? "primary" : "outline"}
-            onClick={() => setSortOrder("oldest")}
-            className="ml-2"
+            variant={sortBy === "created_at" && sortOrder === "asc" ? "primary" : "outline"}
+            onClick={() => setSort("created_at", "asc")}
           >
             오래된 순
           </Button>
+          <Button
+            variant={sortBy === "score" && sortOrder === "desc" ? "primary" : "outline"}
+            onClick={() => setSort("score", "desc")}
+          >
+            점수 높은 순
+          </Button>
+          <Button
+            variant={sortBy === "score" && sortOrder === "asc" ? "primary" : "outline"}
+            onClick={() => setSort("score", "asc")}
+          >
+            점수 낮은 순
+          </Button>
         </div>
+
+        {/* 날짜 필터 */}
         <div>
           <input
             type="date"
@@ -69,6 +102,7 @@ const History: React.FC = () => {
         </div>
       </div>
 
+      {/* 테이블 */}
       <table className="min-w-full bg-white border">
         <thead className="bg-gray-100">
           <tr>
@@ -78,15 +112,15 @@ const History: React.FC = () => {
           </tr>
         </thead>
         <tbody>
-          {data.length ? (
-            data.map((row) => (
-              <tr key={row.date} className="border-t">
-                <td className="py-2 px-4">{row.date}</td>
+          {filteredData.length ? (
+            filteredData.map((row, index) => (
+              <tr key={index} className="border-t">
+                <td className="py-2 px-4">{row.created_at.slice(0, 10)}</td>
                 <td className="py-2 px-4">
                   <Button
                     variant="outline"
                     onClick={() =>
-                      downloadPDF(row.pdfUrl, `${row.date}-report.pdf`)
+                      downloadPDF(row.pdf_url, `${row.created_at.slice(0, 10)}-report.pdf`)
                     }
                   >
                     <Download className="w-4 h-4 mr-1" /> PDF
@@ -94,9 +128,9 @@ const History: React.FC = () => {
                 </td>
                 <td className="py-2 px-4">
                   <div className="flex items-center justify-center gap-2">
-                    {row.score}점
+                    {row.total_score}점
                     <img
-                      src={getFaceImg(row.score)}
+                      src={getFaceImg(row.total_score)}
                       alt="표정"
                       className="w-6 h-6"
                     />
