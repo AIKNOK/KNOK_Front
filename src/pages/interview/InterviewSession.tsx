@@ -54,6 +54,7 @@ export const InterviewSession = () => {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const recordTimerRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
+  const transcriptRef = useRef<string>("");
 
   const { countsRef, segmentsRef } = usePostureTracking(videoRef, videoId);
 
@@ -230,62 +231,70 @@ const onStart = async () => {
   }
 };
 
-  // ───── 꼬리 질문 API 호출 함수 ─────
-  const decideFollowup = async (
-    userAnswer: string,
-    questionIndex: number
-  ): Promise<boolean> => {
-    const token =
-      localStorage.getItem("id_token") || localStorage.getItem("access_token");
-    if (!token || !resumeRef.current) return false;
+// ───── 꼬리 질문 API 호출 함수 ─────
+const decideFollowup = async (
+  userAnswer: string,
+  questionIndex: number
+): Promise<boolean> => {
+  const token =
+    localStorage.getItem("id_token") || localStorage.getItem("access_token");
+  if (!token || !resumeRef.current) return false;
+  console.log("🚀 decideFollowup() 호출됨");
+  const payload = {
+    resume_text: resumeRef.current,
+    user_answer: userAnswer.trim(),
+    base_question_number: parseInt(questions[questionIndex].id.match(/\d+/)?.[0] || "0", 10),
+    interview_id: videoId,
+    existing_question_numbers: questions.map((q) => q.id),
+  };
 
-    const payload = {
-      resume_text: resumeRef.current,
-      user_answer: userAnswer.trim(),
-      base_question_number: parseInt(questions[questionIndex].id, 10),
-      interview_id: videoId,
-      existing_question_numbers: questions.map((q) => q.id),
-    };
+  console.log("▶ 꼬리질문 API 호출 직전 payload:", payload);
 
-    const res = await fetch(`${API_BASE}/followup/check/`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      console.error("▶ follow-up check failed:", res.status, await res.text());
-      return false;
-    }
-    const data = await res.json();
-    if (data.followup && data.question) {
-      const baseId = questions[questionIndex].id.split("-")[0];
-      const suffixCnt = questions.filter((q) =>
-        q.id.startsWith(baseId + "-")
-      ).length;
-      const newId = `${baseId}-${suffixCnt + 1}`;
-      
-      // 꼬리 질문에 대한 오디오 URL 설정
-      // 백엔드에서 TTS 생성 후 반환된 audio_url 사용
-      const audioUrl = data.audio_url || `${S3_BASE_URL}${userEmail.split('@')[0]}/${newId}.wav`;
-      
-      setQuestions((prev) => [
+  const res = await fetch(`${API_BASE}/followup/check/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  console.log(`▶ followup/check 상태코드: ${res.status}`);
+
+  if (!res.ok) {
+    console.error("▶ follow-up check failed:", res.status, await res.text());
+    return false;
+  }
+
+  const data = await res.json();
+
+  console.log("🧠 [FOLLOW-UP 디버그]");
+  console.log("1️⃣ 전체 키워드 목록:", data.keywords || "(없음)");
+  console.log("2️⃣ 답변에서 매칭된 키워드:", data.matched_keywords || "(없음)");
+  console.log("3️⃣ Follow-up 필요 여부:", data.followup);
+
+  if (data.followup && data.question && data.question_number) {
+    setQuestions((prev) => {
+      const updated = [
         ...prev.slice(0, questionIndex + 1),
         {
-          id: newId,
+          id: data.question_number,
           text: data.question,
-          type: "behavioral",
-          difficulty: "medium",
-          audio_url: audioUrl,
+          type: "behavioral" as const,
+          difficulty: "medium" as const,
+          audio_url: data.audio_url,
         },
         ...prev.slice(questionIndex + 1),
-      ]);
-      return true;
-    }
-    return false;
-  };
+      ];
+      setQIdx(questionIndex + 1);
+      return updated;
+    });
+    return true;
+  }
+
+  return false;
+};
+
 
   // ───── 질문 인덱스 변경 시 녹음 시작 ─────
   useEffect(() => {
@@ -425,8 +434,13 @@ const onStart = async () => {
         console.log("✅ upload_id 수신:", data.upload_id);
         return;
       }
-      if (data.transcript)
-        setTranscript((prev) => prev + data.transcript + "\n");
+      if (data.transcript) {
+        setTranscript((prev) => {
+          const updated = prev + data.transcript + "\n";
+          transcriptRef.current = updated;  // ✅ 여기에 추가
+          return updated;
+        });
+      }
     };
     ws.onerror = (e) => console.error("WebSocket 오류", e);
     ws.onclose = () => console.log("WebSocket 종료");
@@ -434,6 +448,8 @@ const onStart = async () => {
 
   // ───── 녹음 종료 & 업로드 & 꼬리질문 ─────
   const stopRecording = async () => {
+    console.log("🛑 stopRecording() 실행됨");
+    console.log("📝 transcript 내용:", transcript);
     if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setIsRecording(false);
@@ -471,15 +487,13 @@ const onStart = async () => {
       body: form,
     }).catch(console.error);
 
-    if (transcript.trim().length > 0) {
-      try {
-        await decideFollowup(transcript, qIdx);
-      } catch (err) {
-        console.error("꼬리 질문 결정 실패:", err);
-        alert("꼬리 질문 결정 중 오류가 발생했습니다.");
-      }
+    console.log("📝 transcript 내용:", transcriptRef.current);
+    if (transcriptRef.current.trim()) {
+      await decideFollowup(transcriptRef.current, qIdx);  // ✅ 여기서도 ref 사용
+      console.log("📋 transcript.trim().length:", transcriptRef.current.trim().length);
     }
     setIsPreparing(false);
+    // no need to call handleNext here; qIdx already moved if followup
 
     // ─── 전체 영상 업로드 등 나머지 로직 ───
     if (mediaRecorderRef.current && qIdx === questions.length - 1) {
