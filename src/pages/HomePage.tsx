@@ -8,22 +8,40 @@ export const HomePage: React.FC = () => {
   return (
     <>
       {/* Hero Section */}
-      <section className="bg-[#e1dbf6] h-[383px] flex items-center">
-        <div className="container mx-auto px-4">
-          <p className="text-[#8447e9] text-base font-semibold tracking-wider mb-8">
-            OUR SERVICES
-          </p>
-          <h2 className="text-[#0f0f0f] text-4xl font-medium tracking-tighter leading-[1.2] max-w-[780px] mb-6">
-            똑똑..
-            <br />
-            당신의 취업문을 두드리는 "노크"
-          </h2>
+      <section className="bg-[#e1dbf6] py-8 md:py-8">
+        {/* flex & items-center를 container 안으로 옮깁니다 */}
+        <div className="container mx-auto px-4 h-full flex items-center">
+          
+          {/* 왼쪽: 텍스트 */}
+          <div className="w-full md:w-1/2 pr-4">
+            <h2 className="mb-6 max-w-[780px]">
+              <span className="block text-3xl md:text-4xl font-medium tracking-tight leading-tight mb-2">
+                똑똑..
+              </span>
+              <span className="block text-5xl md:text-6xl font-medium tracking-tight leading-tight">
+                당신의 취업문을 두드리는 "노크"
+              </span>
+            </h2>
+            <Link to="/interview/upload-resume">
+              <Button variant="primary" size="lg" className="text-base px-6 py-3">
+                AI 모의면접 시작하기
+              </Button>
+            </Link>
+          </div>
 
-          <Link to="/interview/upload-resume">
-            <Button variant="primary" size="lg" className="text-base px-6 py-3">
-              AI 모의면접 시작하기
-            </Button>
-          </Link>
+          {/* 오른쪽: 이미지 */}
+          <div className="w-full md:w-1/2 flex justify-center">
+            <img
+              src="/캐릭터 2 누끼.png"
+              alt="knok 로봇 캐릭터"
+              className="
+              w-[300px]
+              h-auto
+              object-contain
+              "
+            />
+          </div>
+
         </div>
       </section>
 
