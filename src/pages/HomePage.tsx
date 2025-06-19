@@ -66,12 +66,16 @@ const HomePage: React.FC = () => (
         >
           {jobSites.map(site => (
             <SwiperSlide key={site.href}>
-              <a href={site.href} target="_blank" rel="noopener noreferrer">
+              <a href={site.href} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center">
                 <img
                   src={site.src}
                   alt={site.alt}
-                  className="h-24 md:h-32 object-contain mx-auto"
+                  className="h-24 md:h-32 object-contain"
                 />
+                {/* alt 텍스트를 진하게 표시 */}
+                <span className="mt-2 text-sm font-semibold text-[#3f3f3f]">
+                  {site.alt}
+                </span>
               </a>
             </SwiperSlide>
           ))}
@@ -103,9 +107,9 @@ const HomePage: React.FC = () => (
               Goal-Based Practice
             </h3>
             <p className="text-[#3f3f3f] text-base leading-relaxed">
-              원하는 기업과 직무를 목표로 설정하고, <br />
-              AI가 맞춤형 면접 훈련을 제공합니다. <br />
-              KNOK는 단순한 연습을 넘어, 취업이라는 목표 달성을 위한 전략적 준비를 돕습니다.
+              원하는 기업과 직무를 목표로 설정하고,
+              <br /> AI가 맞춤형 면접 훈련을 제공합니다.
+              <br /> KNOK는 단순한 연습을 넘어, 취업이라는 목표 달성을 위한 전략적 준비를 돕습니다.
             </p>
           </div>
 
@@ -117,8 +121,8 @@ const HomePage: React.FC = () => (
               Rapid Skill Boost
             </h3>
             <p className="text-[#3f3f3f] text-base leading-relaxed">
-              단 몇 번의 연습만으로도 확실한 변화를 느껴보세요. <br />
-              AI 분석 기반의 집중 피드백으로 면접 실력이 빠르게 향상됩니다.
+              단 몇 번의 연습만으로도 확실한 변화를 느껴보세요.
+              <br /> AI 분석 기반의 집중 피드백으로 면접 실력이 빠르게 향상됩니다.
             </p>
           </div>
 
@@ -130,9 +134,9 @@ const HomePage: React.FC = () => (
               Structured Answer Design
             </h3>
             <p className="text-[#3f3f3f] text-base leading-relaxed">
-              AI가 논리 흐름, 일관된 답변, 키워드 연결, 핵심 전달력을 분석해 <br />
-              더 설득력 있는 응답 플로우로 다듬어드립니다. <br />
-              논리적이고 일관된 답변 흐름으로 면접관을 사로잡으세요.
+              AI가 논리 흐름, 일관된 답변, 키워드 연결, 핵심 전달력을 분석해
+              <br /> 더 설득력 있는 응답 플로우로 다듬어드립니다.
+              <br /> 논리적이고 일관된 답변 흐름으로 면접관을 사로잡으세요.
             </p>
           </div>
         </div>
