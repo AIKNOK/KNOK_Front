@@ -14,7 +14,7 @@ const teamMembers = [
     name: "김태영",
     github: "taeyoung0823",
     image: "/태영.png",   // public/태영.png
-    message: "사람을 위한 기술을 고민하는 개발자가 되겠습니다.",
+    message: "배포할 때 손이 안 떨린다? 그건 아직 진짜 장애를 안 겪어본 거야.",
   },
   {
     id: "geonho",
@@ -35,7 +35,7 @@ const teamMembers = [
     name: "최동욱",
     github: "ddungddangi",
     image: "/동욱.png",   // public/동욱.png
-    message: "문제의 본질을 꿰뚫고 해결책을 제시하는 개발자가 되겠습니다.",
+    message: "print(hello word)",
   },
 ];
 
