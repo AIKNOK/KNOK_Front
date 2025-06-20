@@ -1,37 +1,38 @@
+// src/pages/HomePage.tsx
+
 import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/shared/Button";
 
-// Swiper import
+// Swiper import (Navigation 모듈 제거)
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Autoplay, Pagination, Navigation } from "swiper/modules";
+import { Autoplay, Pagination } from "swiper/modules";
 
-// Swiper styles
+// Swiper styles (navigation 스타일은 제거)
 import "swiper/css";
 import "swiper/css/autoplay";
 import "swiper/css/pagination";
-import "swiper/css/navigation";
 
 // 취업 공고 사이트 목록
 const jobSites = [
   { href: "https://edu.rapa.or.kr/recruitment/1250", src: "/public/rapa dx 10기.png", alt: "RAPA DX 11기" },
-  { href: "https://www.jobkorea.co.kr", src: "/public/잡코리아.png", alt: "잡코리아" },
-  { href: "https://www.incruit.com", src: "/public/인크루트.png", alt: "인크루트" },
-  { href: "https://www.peoplenjob.com", src: "/public/피플앤잡.png", alt: "피플앤잡" },
-  { href: "https://www.saramin.co.kr", src: "/public/사람인.png", alt: "사람인" },
+  { href: "https://www.jobkorea.co.kr",               src: "/public/잡코리아.png",     alt: "잡코리아" },
+  { href: "https://www.incruit.com",                  src: "/public/인크루트.png",     alt: "인크루트" },
+  { href: "https://www.peoplenjob.com",               src: "/public/피플앤잡.png",     alt: "피플앤잡" },
+  { href: "https://www.saramin.co.kr",                src: "/public/사람인.png",       alt: "사람인" },
 ];
 
 const HomePage: React.FC = () => (
   <>
-    {/* Hero Section: 원본 그대로 */}
-    <section className="bg-[#e1dbf6] py-8 md:py-12">
+    {/* Hero Section */}
+    <section className="bg-[#e1dbf6] py-8 md:py-6">
       <div className="container mx-auto px-4 h-full flex items-center">
         <div className="w-full md:w-1/2 pr-4">
           <h2 className="mb-6 max-w-[780px]">
-            <span className="block text-3xl md:text-4xl font-medium tracking-tight leading-tight mb-2">
+            <span className="block text-2xl font-medium leading-tight mb-2">
               똑똑..
             </span>
-            <span className="block text-3xl md:text-4xl font-medium tracking-tight leading-tight whitespace-nowrap">
+            <span className="block text-3xl md:text-4xl font-medium leading-tight whitespace-nowrap">
               당신의 취업문을 두드리는 "노크"
             </span>
           </h2>
@@ -51,28 +52,31 @@ const HomePage: React.FC = () => (
       </div>
     </section>
 
-    {/* Jobs Slider Section: pagination 여백 확보 */}
+    {/* Jobs Slider Section: 좌우 화살표 제거 */}
     <section className="py-8 bg-white">
       <div className="container mx-auto px-4 relative pb-12">
         <Swiper
-          modules={[Autoplay, Pagination, Navigation]}
+          modules={[Autoplay, Pagination]}               // Navigation 모듈 삭제
           spaceBetween={20}
           slidesPerView={3}
           loop
           autoplay={{ delay: 3000, disableOnInteraction: false }}
-          pagination={{ clickable: true }}
-          navigation
+          pagination={{ clickable: true }}               // 화살표 대신 점 페이징만
           className="!pb-8"
         >
           {jobSites.map(site => (
             <SwiperSlide key={site.href}>
-              <a href={site.href} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center">
+              <a
+                href={site.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center"
+              >
                 <img
                   src={site.src}
                   alt={site.alt}
                   className="h-24 md:h-32 object-contain"
                 />
-                {/* alt 텍스트를 진하게 표시 */}
                 <span className="mt-2 text-sm font-semibold text-[#3f3f3f]">
                   {site.alt}
                 </span>
@@ -83,7 +87,7 @@ const HomePage: React.FC = () => (
       </div>
     </section>
 
-    {/* Services Section: 위쪽 패딩 축소 */}
+    {/* Services Section */}
     <section className="pt-6 pb-24 bg-white">
       <div className="container mx-auto px-4">
         <p className="text-[#8447e9] text-base font-semibold tracking-wider mb-4">
@@ -95,7 +99,8 @@ const HomePage: React.FC = () => (
         </h2>
 
         <p className="text-[#3f3f3f] text-sm md:text-base leading-relaxed max-w-[1128px] mb-16">
-          AI 기반의 심층 면접관이 자기소개서를 분석하여 맞춤 질문을 생성하고, 당신의 답변을 다각도로 평가합니다. 정교한 AI 피드백 시스템으로 실전 역량을 강화하고 합격까지 이끄는 최적의 면접 솔루션을 경험하세요.
+          AI 기반의 심층 면접관이 자기소개서를 분석하여 맞춤 질문을 생성하고, 당신의 답변을 다각도로 평가합니다.
+          정교한 AI 피드백 시스템으로 실전 역량을 강화하고 합격까지 이끄는 최적의 면접 솔루션을 경험하세요.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-16">
