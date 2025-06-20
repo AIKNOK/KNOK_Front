@@ -364,7 +364,7 @@ const decideFollowup = async (
             URL.revokeObjectURL(blobUrl);
           };
           
-          // 오디오 재생
+          // 오디오 재생a
           await audioRef.current.play();
           console.log("✅ 오디오 재생 시작");
           
