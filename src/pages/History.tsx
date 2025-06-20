@@ -1,12 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { Download } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Button } from "../components/shared/Button";
 
-const rawData = [
-  { date: "2025-06-07", score: 85, pdfUrl: "/pdfs/report-2025-06-07.pdf" },
-  { date: "2025-06-01", score: 72, pdfUrl: "/pdfs/report-2025-06-01.pdf" },
-];
+interface FeedbackItem {
+  created_at: string;
+  total_score: number;
+  pdf_url: string;
+}
 
 const downloadPDF = (url: string, filename: string) => {
   saveAs(url, filename);
@@ -19,17 +21,33 @@ const getFaceImg = (score: number) => {
 };
 
 const History: React.FC = () => {
+  const [data, setData] = useState<FeedbackItem[]>([]);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [filterDate, setFilterDate] = useState<string>("");
 
-  const sorted = [...rawData].sort((a, b) =>
-    sortOrder === "newest"
-      ? b.date.localeCompare(a.date)
-      : a.date.localeCompare(b.date)
-  );
-  const data = filterDate
-    ? sorted.filter((row) => row.date === filterDate)
-    : sorted;
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const sort = "created_at";
+        const order = sortOrder === "newest" ? "desc" : "asc";
+        const token = localStorage.getItem("access_token");
+        const res = await axios.get(`/api/feedback/history?sort=${sort}&order=${order}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        console.log("📦 feedback response", res.data); 
+        setData(res.data);
+      } catch (err) {
+        console.error("피드백 히스토리 불러오기 실패", err);
+      }
+    };
+    fetchData();
+  }, [sortOrder]);
+
+  const filteredData = filterDate
+    ? data.filter((item) => item.created_at.slice(0, 10) === filterDate)
+    : data;
 
   return (
     <div className="max-w-3xl mx-auto py-10 px-4">
@@ -78,15 +96,15 @@ const History: React.FC = () => {
           </tr>
         </thead>
         <tbody>
-          {data.length ? (
-            data.map((row) => (
-              <tr key={row.date} className="border-t">
-                <td className="py-2 px-4">{row.date}</td>
+          {filteredData.length ? (
+            filteredData.map((row, index) => (
+              <tr key={index} className="border-t">
+                <td className="py-2 px-4">{row.created_at.slice(0, 10)}</td>
                 <td className="py-2 px-4">
                   <Button
                     variant="outline"
                     onClick={() =>
-                      downloadPDF(row.pdfUrl, `${row.date}-report.pdf`)
+                      downloadPDF(row.pdf_url, `${row.created_at.slice(0, 10)}-report.pdf`)
                     }
                   >
                     <Download className="w-4 h-4 mr-1" /> PDF
@@ -94,9 +112,9 @@ const History: React.FC = () => {
                 </td>
                 <td className="py-2 px-4">
                   <div className="flex items-center justify-center gap-2">
-                    {row.score}점
+                    {row.total_score}점
                     <img
-                      src={getFaceImg(row.score)}
+                      src={getFaceImg(row.total_score)}
                       alt="표정"
                       className="w-6 h-6"
                     />
