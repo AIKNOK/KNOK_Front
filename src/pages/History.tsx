@@ -53,22 +53,36 @@ const History: React.FC = () => {
     <div className="max-w-3xl mx-auto py-10 px-4">
       <h1 className="text-2xl font-bold text-center mb-6">내 면접 기록</h1>
 
-      <div className="flex justify-between mb-6">
-        <div>
+      <div className="flex justify-between mb-6 flex-wrap gap-4">
+        {/* 정렬 버튼 */}
+        <div className="flex gap-2 flex-wrap">
           <Button
-            variant={sortOrder === "newest" ? "primary" : "outline"}
-            onClick={() => setSortOrder("newest")}
+            variant={sortBy === "created_at" && sortOrder === "desc" ? "primary" : "outline"}
+            onClick={() => setSort("created_at", "desc")}
           >
             최신순
           </Button>
           <Button
-            variant={sortOrder === "oldest" ? "primary" : "outline"}
-            onClick={() => setSortOrder("oldest")}
-            className="ml-2"
+            variant={sortBy === "created_at" && sortOrder === "asc" ? "primary" : "outline"}
+            onClick={() => setSort("created_at", "asc")}
           >
             오래된 순
           </Button>
+          <Button
+            variant={sortBy === "score" && sortOrder === "desc" ? "primary" : "outline"}
+            onClick={() => setSort("score", "desc")}
+          >
+            점수 높은 순
+          </Button>
+          <Button
+            variant={sortBy === "score" && sortOrder === "asc" ? "primary" : "outline"}
+            onClick={() => setSort("score", "asc")}
+          >
+            점수 낮은 순
+          </Button>
         </div>
+
+        {/* 날짜 필터 */}
         <div>
           <input
             type="date"
@@ -87,6 +101,7 @@ const History: React.FC = () => {
         </div>
       </div>
 
+      {/* 테이블 */}
       <table className="min-w-full bg-white border">
         <thead className="bg-gray-100">
           <tr>
