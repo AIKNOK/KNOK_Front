@@ -111,35 +111,35 @@ const FeedbackReport: React.FC = () => {
   
   // PDF 업로드
   const handleGenerateAndUploadPDF = async () => {
-  try {
-    const blob = await generatePDFBlob();
+    try {
+      const blob = await generatePDFBlob();
 
-    const formData = new FormData();
-    formData.append('file', blob, 'feedback_report.pdf');
-    formData.append('videoId', upload_id);
+      const formData = new FormData();
+      formData.append('pdf', blob, 'feedback_report.pdf');
+      formData.append('video_id', upload_id);
 
-    const token =
-      localStorage.getItem('id_token') ||
-      localStorage.getItem('access_token') ||
-      '';
+      const token =
+        localStorage.getItem('id_token') ||
+        localStorage.getItem('access_token') ||
+        '';
 
-    const res = await fetch(`${API_BASE}/upload/pdf/`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
-    if (!res.ok) throw new Error('PDF 업로드 실패');
+      const res = await fetch(`${API_BASE}/upload/pdf/`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      if (!res.ok) throw new Error('PDF 업로드 실패');
 
-    const data: { pdf_url: string } = await res.json();
-    setPdfUrl(data.pdf_url);
-    return data;
-  } catch (e: any) {
-    console.error('PDF 생성 또는 업로드 실패', e);
-    throw e;
-  }
-};
+      const data: { pdf_url: string } = await res.json();
+      setPdfUrl(data.pdf_url);
+      return data;
+    } catch (e: any) {
+      console.error('PDF 생성 또는 업로드 실패', e);
+      throw e;
+    }
+  };
 
   // 2) ZIP 다운로드 핸들러
   const handleDownload = async () => {
