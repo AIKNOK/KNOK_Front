@@ -4,6 +4,10 @@ import { FaceMesh, NormalizedLandmark } from '@mediapipe/face_mesh';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
+const pose = new Pose({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+});
+
 type PostureReason = 'shoulder' | 'headDown' | 'ear' | 'gaze';
 
 export function usePostureTracking(
@@ -119,17 +123,45 @@ export function usePostureTracking(
       }
     });
 
+    // const analyze = async () => {
+    //   const video = videoRef.current;
+    //   if (!video) return;
+    //   const canvas = document.createElement('canvas');
+    //   canvas.width = video.videoWidth;
+    //   canvas.height = video.videoHeight;
+    //   const ctx = canvas.getContext('2d');
+    //   if (!ctx) return;
+    //   ctx.drawImage(video, 0, 0);
+    //   await faceMesh.send({ image: canvas });
+    //   await pose.send({ image: canvas });
+    // };
+
     const analyze = async () => {
       const video = videoRef.current;
-      if (!video) return;
+
+      // 1. 비디오 준비 확인
+      if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+        console.warn("Video not ready");
+        return;
+      }
+
+      // 2. canvas 구성
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
+
+      // 3. 프레임 캡처
       ctx.drawImage(video, 0, 0);
-      await faceMesh.send({ image: canvas });
-      await pose.send({ image: canvas });
+
+      try {
+        // 4. 분석기 전송
+        await faceMesh.send({ image: canvas });
+        await pose.send({ image: canvas }); // 💥 이 줄에서 crash 가능
+      } catch (error) {
+        console.error("Pose/FaceMesh send error:", error);
+      }
     };
 
     const intervalId = setInterval(analyze, 3000);
