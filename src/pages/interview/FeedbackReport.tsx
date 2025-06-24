@@ -187,6 +187,7 @@ const FeedbackReport: React.FC = () => {
 
   // 메인 로직
   useEffect(() => {
+    console.log("🐛 FeedbackReport 컴포넌트 마운트됨");
     if (!analysis) return;
     const fetchFeedback = async () => {
       setLoading(true);
@@ -265,7 +266,7 @@ const FeedbackReport: React.FC = () => {
       }
     };
     fetchFeedback();
-  }, [analysis, email_prefix, upload_id]);
+  }, []);
 
   
 

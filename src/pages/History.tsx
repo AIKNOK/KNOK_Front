@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Download } from "lucide-react";
+import { Download, Loader } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Button } from "../components/shared/Button";
 
 interface FeedbackItem {
+  video_id: string;
   created_at: string;
   total_score: number;
   pdf_url: string;
 }
 
-const downloadPDF = (url: string, filename: string) => {
-  saveAs(url, filename);
-};
 
 const getFaceImg = (score: number) => {
   if (score >= 80) return "/smile.png";
@@ -24,6 +22,7 @@ const History: React.FC = () => {
   const [data, setData] = useState<FeedbackItem[]>([]);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [filterDate, setFilterDate] = useState<string>("");
+  const [loadingVideoId, setLoadingVideoId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -46,43 +45,73 @@ const History: React.FC = () => {
   }, [sortOrder]);
 
   const filteredData = filterDate
-    ? data.filter((item) => item.created_at.slice(0, 10) === filterDate)
-    : data;
+  ? data.filter((item) => {
+      const itemDate = new Date(item.created_at).toISOString().slice(0, 10);
+      return itemDate === filterDate;
+    })
+  : data;
+
+  const formatKST = (utcDate: string) => {
+    const date = new Date(utcDate);
+    // UTC → KST (+9시간)
+    date.setHours(date.getHours() + 9);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mi = String(date.getMinutes()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  };
+
+  // PDF 다운로드 버튼 클릭 시 실행되는 함수
+  const downloadPDF = async (videoId: string, createdAt: string) => {
+  try {
+    setLoadingVideoId(videoId);
+    const token = localStorage.getItem('access_token');
+    const res = await axios.get("/api/get-signed-url", {
+      params: { video_id: videoId },
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    console.log(videoId)
+    const signedUrl = res.data.signed_url;
+    const date = new Date(createdAt);
+    const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+      date.getDate()
+    ).padStart(2, '0')}_${String(date.getHours()).padStart(2, '0')}:${String(
+      date.getMinutes()
+    ).padStart(2, '0')}`;
+
+    const filename = `${formattedDate}_interview.pdf`;
+    saveAs(signedUrl, filename);
+  } catch (err) {
+    console.error("다운로드 실패:", err);
+  } finally {
+    setLoadingVideoId(null);
+  }
+};
 
   return (
     <div className="max-w-3xl mx-auto py-10 px-4">
       <h1 className="text-2xl font-bold text-center mb-6">내 면접 기록</h1>
 
-      <div className="flex justify-between mb-6 flex-wrap gap-4">
-        {/* 정렬 버튼 */}
-        <div className="flex gap-2 flex-wrap">
+      <div className="flex justify-between mb-6">
+        <div>
           <Button
-            variant={sortBy === "created_at" && sortOrder === "desc" ? "primary" : "outline"}
-            onClick={() => setSort("created_at", "desc")}
+            variant={sortOrder === "newest" ? "primary" : "outline"}
+            onClick={() => setSortOrder("newest")}
           >
             최신순
           </Button>
           <Button
-            variant={sortBy === "created_at" && sortOrder === "asc" ? "primary" : "outline"}
-            onClick={() => setSort("created_at", "asc")}
+            variant={sortOrder === "oldest" ? "primary" : "outline"}
+            onClick={() => setSortOrder("oldest")}
+            className="ml-2"
           >
             오래된 순
           </Button>
-          <Button
-            variant={sortBy === "score" && sortOrder === "desc" ? "primary" : "outline"}
-            onClick={() => setSort("score", "desc")}
-          >
-            점수 높은 순
-          </Button>
-          <Button
-            variant={sortBy === "score" && sortOrder === "asc" ? "primary" : "outline"}
-            onClick={() => setSort("score", "asc")}
-          >
-            점수 낮은 순
-          </Button>
         </div>
-
-        {/* 날짜 필터 */}
         <div>
           <input
             type="date"
@@ -101,7 +130,6 @@ const History: React.FC = () => {
         </div>
       </div>
 
-      {/* 테이블 */}
       <table className="min-w-full bg-white border">
         <thead className="bg-gray-100">
           <tr>
@@ -114,15 +142,22 @@ const History: React.FC = () => {
           {filteredData.length ? (
             filteredData.map((row, index) => (
               <tr key={index} className="border-t">
-                <td className="py-2 px-4">{row.created_at.slice(0, 10)}</td>
+                <td className="py-2 px-4">{formatKST(row.created_at)}</td>
                 <td className="py-2 px-4">
                   <Button
                     variant="outline"
-                    onClick={() =>
-                      downloadPDF(row.pdf_url, `${row.created_at.slice(0, 10)}-report.pdf`)
-                    }
+                    onClick={() => downloadPDF(row.video_id, row.created_at)}
+                    disabled={loadingVideoId === row.video_id}
                   >
-                    <Download className="w-4 h-4 mr-1" /> PDF
+                    {loadingVideoId === row.video_id ? (
+                      <>
+                        <Loader className="w-4 h-4 mr-1 animate-spin" /> 다운로드 중...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4 mr-1" /> PDF
+                      </>
+                    )}
                   </Button>
                 </td>
                 <td className="py-2 px-4">
