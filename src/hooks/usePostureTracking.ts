@@ -1,9 +1,24 @@
 import { useEffect, useRef } from "react";
+/*
 import { Pose } from "@mediapipe/pose";
-/*import { FaceMesh, NormalizedLandmark } from "@mediapipe/face_mesh";*/
+import { FaceMesh, NormalizedLandmark } from "@mediapipe/face_mesh";
 import * as mpPose from "@mediapipe/pose";
 import * as mpFaceMesh from "@mediapipe/face_mesh";
 import type { NormalizedLandmark } from '@mediapipe/face_mesh';
+*/
+declare global {
+  interface Window {
+    Pose: any;
+    FaceMesh: any;
+  }
+}
+
+type NormalizedLandmark = {
+  x: number;
+  y: number;
+  z: number;
+  visibility?: number;
+};
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 type PostureReason = "shoulder" | "headDown" | "ear" | "gaze";
@@ -36,12 +51,12 @@ export function usePostureTracking(
     resetPostureBaseline();
 
     if (!videoRef.current) return;
-    const pose = new mpPose.Pose({
-      locateFile: (file) =>
+    const pose = new window.Pose({
+      locateFile: (file: string) =>
         `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
     });
-    const faceMesh = new mpFaceMesh.FaceMesh({
-      locateFile: (file) =>
+    const faceMesh = new window.FaceMesh({
+      locateFile: (file: string) =>
         `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
     });
 
@@ -59,14 +74,14 @@ export function usePostureTracking(
     });
 
     let latestFaceLandmarks: NormalizedLandmark[] | null = null;
-    faceMesh.onResults((results) => {
+    faceMesh.onResults((results: any) => {
       latestFaceLandmarks = results.multiFaceLandmarks?.[0] ?? null;
     });
 
     const videoStart = Date.now();
     const getVideoTime = () => (Date.now() - videoStart) / 1000;
 
-    pose.onResults((results) => {
+    pose.onResults((results: any) => {
       const lm = results.poseLandmarks;
       if (!lm) {
         startBadTimeRef.current = null;
