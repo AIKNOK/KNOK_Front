@@ -7,14 +7,14 @@ const teamMembers = [
     name: "김재엽",
     github: "wera4677",
     image: "/재엽.png",   // public/재엽.png
-    message: "혼자보다 함께, 좋은 팀워크로 문제를 해결하는 개발자가 되겠습니다.",
+    message: "어? 금지\n 모여있기 금지\n 표정 심각해지기 금지\n 회의 길어지기 금지\n 갑자기 진지해지기 금지\n ",
   },
   {
     id: "taeyoung",
     name: "김태영",
     github: "taeyoung0823",
     image: "/태영.png",   // public/태영.png
-    message: "사람을 위한 기술을 고민하는 개발자가 되겠습니다.",
+    message: "배포할 때 손이 안 떨린다? 그건 아직 진짜 장애를 안 겪어본 거야.",
   },
   {
     id: "geonho",
@@ -35,7 +35,7 @@ const teamMembers = [
     name: "최동욱",
     github: "ddungddangi",
     image: "/동욱.png",   // public/동욱.png
-    message: "문제의 본질을 꿰뚫고 해결책을 제시하는 개발자가 되겠습니다.",
+    message: "print(hello word)",
   },
 ];
 
@@ -120,7 +120,7 @@ export default function AboutUs() {
                 ref={(el) => (messageRefs.current[member.id] = el)}
                 className="bg-white border border-gray-300 rounded-xl p-8 pl-32 shadow-sm min-h-[160px]"
               >
-                <p className="text-lg text-gray-800 font-medium leading-relaxed">
+                <p className="text-lg text-gray-800 font-medium leading-relaxed whitespace-pre-line">
                   {member.message}
                 </p>
               </div>
