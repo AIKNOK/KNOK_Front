@@ -26,7 +26,6 @@ export const UploadResume: React.FC = () => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        credentials: "include",
       });
       if (!res.ok) throw new Error("이력서 조회 실패");
       const data = await res.json();
