@@ -1,7 +1,5 @@
-// src/pages/Login.tsx
-
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { Input } from "../components/shared/Input";
 import { Button } from "../components/shared/Button";
@@ -10,12 +8,23 @@ import Layout from "../components/layout/Layout";
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export const Login: React.FC = () => {
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // 이전 페이지 정보 가져오기
+  const from = (location.state as { from?: string })?.from || "/";
 
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({ email: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
+  
+  // 이미 로그인된 경우 리디렉션
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(from);
+    }
+  }, [isAuthenticated, navigate, from]);
 
   const validateForm = () => {
     const newErrors = { email: "", password: "" };
@@ -69,14 +78,12 @@ export const Login: React.FC = () => {
         return;
       }
 
-      // AuthContext.login 에 ID 토큰 전달
-      login(token);
+      // AuthContext.login 에 ID 토큰과 이메일 전달
+      // login 함수 내부에서 localStorage에 저장하므로 중복 저장 코드 제거
+      login(token, formData.email);
 
-      // 이메일 저장
-      localStorage.setItem("user_email", formData.email);
-
-      // 로그인 성공 후 리다이렉트
-      navigate("/");
+      // 로그인 성공 후 이전 페이지 또는 홈으로 리디렉션
+      navigate(from);
     } catch (err) {
       console.error("로그인 오류:", err);
       setErrors(p => ({ ...p, email: "서버와의 통신에 실패했습니다" }));
@@ -95,87 +102,66 @@ export const Login: React.FC = () => {
 
   return (
     <Layout noPadding noFooter>
-      <div
-        className="
-          flex items-center justify-center bg-gray-50
-          pt-4 pb-12 px-4 sm:px-6 lg:px-8
-          min-h-[calc(100vh-92px)]
-        "
-      >
-        <div className="max-w-md w-full space-y-8 py-12">
-          <h2 className="text-center text-3xl font-extrabold text-gray-900">
-            로그인
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            아직 계정이 없으신가요?{" "}
-            <Link
-              to="/register"
-              className="font-medium text-primary hover:text-primary/90"
-            >
-              회원가입하기
-            </Link>
-          </p>
-
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <div className="space-y-4">
-              <Input
-                label="이메일"
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                error={errors.email}
-                placeholder="example@email.com"
-                autoComplete="email"
-              />
-              <Input
-                label="비밀번호"
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                error={errors.password}
-                placeholder="••••••••"
-                autoComplete="current-password"
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                />
-                <label
-                  htmlFor="remember-me"
-                  className="ml-2 block text-sm text-gray-900"
-                >
-                  로그인 상태 유지
-                </label>
-              </div>
-              <div className="text-sm">
-                <Link
-                  to="/forgot-password"
-                  className="font-medium text-primary hover:text-primary/90"
-                >
-                  비밀번호를 잊으셨나요?
-                </Link>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              isLoading={isLoading}
-              className="w-full"
-              size="lg"
-            >
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
+          <div>
+            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
               로그인
-            </Button>
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-600">
+              또는{" "}
+              <Link
+                to="/register"
+                className="font-medium text-indigo-600 hover:text-indigo-500"
+              >
+                회원가입
+              </Link>
+            </p>
+          </div>
+          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            <div className="rounded-md shadow-sm -space-y-px">
+              <div>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  placeholder="이메일 주소"
+                  value={formData.email}
+                  onChange={handleChange}
+                  error={errors.email}
+                />
+              </div>
+              <div className="mt-4">
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  placeholder="비밀번호"
+                  value={formData.password}
+                  onChange={handleChange}
+                  error={errors.password}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Button
+                type="submit"
+                fullWidth
+                isLoading={isLoading}
+              >
+                {isLoading ? "로그인 중..." : "로그인"}
+              </Button>
+            </div>
           </form>
         </div>
       </div>
     </Layout>
   );
 };
+
+export default Login;

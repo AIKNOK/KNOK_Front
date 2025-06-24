@@ -13,6 +13,7 @@ import {
   ChartOptions,
 } from 'chart.js';
 import html2pdf from 'html2pdf.js';
+import { useAuth } from '../../contexts/AuthContext';
 
 ChartJS.register(
   RadialLinearScale,
@@ -41,6 +42,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 const FeedbackReport: React.FC = () => {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const { token } = useAuth();
 
   // PDF 업로드 완료를 추적
   const [isPdfUploaded, setIsPdfUploaded] = useState(false);
@@ -56,13 +58,11 @@ const FeedbackReport: React.FC = () => {
     analysis,
     upload_id,     // 이제 videoId 역할
     email_prefix,
-    segments,
     feedbackText,
   } = (location.state ?? {}) as {
     analysis: any;
     upload_id: string;
     email_prefix?: string;
-    segments: any[];
     feedbackText: string;
   };
   const [isDownloading, setIsDownloading] = useState(false);
@@ -111,35 +111,34 @@ const FeedbackReport: React.FC = () => {
   
   // PDF 업로드
   const handleGenerateAndUploadPDF = async () => {
-    try {
-      const blob = await generatePDFBlob();
+  try {
+    const blob = await generatePDFBlob();
 
-      const formData = new FormData();
-      formData.append('pdf', blob, 'feedback_report.pdf');
-      formData.append('video_id', upload_id);
+    const formData = new FormData();
+    formData.append('file', blob, 'feedback_report.pdf');
+    formData.append('videoId', upload_id);
 
-      const token =
-        localStorage.getItem('id_token') ||
-        localStorage.getItem('access_token') ||
-        '';
-
-      const res = await fetch(`${API_BASE}/upload/pdf/`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('PDF 업로드 실패');
-
-      const data: { pdf_url: string } = await res.json();
-      setPdfUrl(data.pdf_url);
-      return data;
-    } catch (e: any) {
-      console.error('PDF 생성 또는 업로드 실패', e);
-      throw e;
+    if (!token) {
+      throw new Error('인증 토큰이 없습니다.');
     }
-  };
+
+    const res = await fetch(`${API_BASE}/upload/pdf/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    if (!res.ok) throw new Error('PDF 업로드 실패');
+
+    const data: { pdf_url: string } = await res.json();
+    setPdfUrl(data.pdf_url);
+    return data;
+  } catch (e: any) {
+    console.error('PDF 생성 또는 업로드 실패', e);
+    throw e;
+  }
+};
 
   // 2) ZIP 다운로드 핸들러
   const handleDownload = async () => {
@@ -149,10 +148,9 @@ const FeedbackReport: React.FC = () => {
     }
     setIsDownloading(true);
     try {
-      const token =
-        localStorage.getItem('id_token') ||
-        localStorage.getItem('access_token') ||
-        '';
+      if (!token) {
+        throw new Error('인증 토큰이 없습니다.');
+      }
       const res = await fetch(`${API_BASE}/download/feedback-zip/`, {
         method: 'POST',
         headers: {
@@ -187,16 +185,14 @@ const FeedbackReport: React.FC = () => {
 
   // 메인 로직
   useEffect(() => {
-    console.log("🐛 FeedbackReport 컴포넌트 마운트됨");
     if (!analysis) return;
     const fetchFeedback = async () => {
       setLoading(true);
       try {
         // 피드백 생성
-        const token =
-          localStorage.getItem('id_token') ||
-          localStorage.getItem('access_token') ||
-          '';
+        if (!token) {
+          throw new Error('인증 토큰이 없습니다.');
+        }
         const fRes = await fetch(
           `${API_BASE}/interview/feedback/generate/`,
           {
@@ -230,21 +226,26 @@ const FeedbackReport: React.FC = () => {
         };
 
         // bad_posture_clips API 호출
-        const res2 = await fetch(`${API_BASE}/video/extract-clips/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            videoId: upload_id,
-            segments,
-            feedbacks: segments.map(segment => generatePostureFeedback(segment.reason)),
-          }),
-        });
-        if (!res2.ok) throw new Error('클립 불러오기 실패');
-        const json2 = await res2.json();
-        setClips(json2.clips);  // ← 클립 상태 업데이트
+        try {
+          const clipsRes = await fetch(`${API_BASE}/video/get-clips-and-segments/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ interview_id: upload_id }),
+          });
+
+          if (!clipsRes.ok) {
+            throw new Error(`Failed to fetch clips and segments: ${clipsRes.statusText}`);
+          }
+          const clipsData = await clipsRes.json();
+          setClips(clipsData.clips || []);
+          // Note: segments are not directly set here as they're not used in the current UI after being fetched.
+        } catch (clipFetchError) {
+          console.error("Error fetching clips and segments:", clipFetchError);
+          setClips([]);
+        }
 
         // 자동 PDF 생성 및 업로드
         setTimeout(async () => {
@@ -266,7 +267,7 @@ const FeedbackReport: React.FC = () => {
       }
     };
     fetchFeedback();
-  }, []);
+  }, [analysis, email_prefix, upload_id]);
 
   
 

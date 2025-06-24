@@ -4,6 +4,7 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: '/', // ✅ S3 정적 호스팅에 반드시 필요!
   plugins: [react()],
   resolve: {
     alias: {
@@ -16,7 +17,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://16.184.28.223:8000',
         changeOrigin: true,
         secure: false,
       },

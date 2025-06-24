@@ -3,6 +3,7 @@ import axios from "axios";
 import { Download, Loader } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Button } from "../components/shared/Button";
+import { useAuth } from "../contexts/AuthContext";
 
 interface FeedbackItem {
   video_id: string;
@@ -23,13 +24,18 @@ const History: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [filterDate, setFilterDate] = useState<string>("");
   const [loadingVideoId, setLoadingVideoId] = useState<string | null>(null);
+  const auth = useAuth();
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const sort = "created_at";
         const order = sortOrder === "newest" ? "desc" : "asc";
-        const token = localStorage.getItem("access_token");
+        const token = auth.token;
+        if (!token) {
+          console.warn("No token found for history fetch.");
+          return;
+        }
         const res = await axios.get(`/api/feedback/history?sort=${sort}&order=${order}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -42,7 +48,7 @@ const History: React.FC = () => {
       }
     };
     fetchData();
-  }, [sortOrder]);
+  }, [sortOrder, auth.token]);
 
   const filteredData = filterDate
   ? data.filter((item) => {
@@ -67,7 +73,11 @@ const History: React.FC = () => {
   const downloadPDF = async (videoId: string, createdAt: string) => {
   try {
     setLoadingVideoId(videoId);
-    const token = localStorage.getItem('access_token');
+    const token = auth.token;
+    if (!token) {
+      console.warn("No token found for PDF download.");
+      return;
+    }
     const res = await axios.get("/api/get-signed-url", {
       params: { video_id: videoId },
       headers: {

@@ -17,7 +17,6 @@ import Contact from "./pages/Contact";
 
 // interview
 import { UploadResume } from "./pages/interview/UploadResume";
-import { InterviewSetting } from "./pages/interview/InterviewSetting";
 import { EnvironmentCheck } from "./pages/interview/EnvironmentCheck";
 import { InterviewSession } from "./pages/interview/InterviewSession";
 import FeedbackReport from "./pages/interview/FeedbackReport";
@@ -52,14 +51,6 @@ function App() {
             element={
               <ProtectedRoute>
                 <UploadResume />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/interview/setting"
-            element={
-              <ProtectedRoute>
-                <InterviewSetting />
               </ProtectedRoute>
             }
           />
