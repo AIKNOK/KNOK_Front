@@ -6,28 +6,36 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 type PostureReason = 'shoulder' | 'headDown' | 'ear' | 'gaze';
 
+interface PostureSegment {
+  reason: PostureReason;
+  start: number;
+  end: number;
+}
+
 export function usePostureTracking(
   videoRef: React.RefObject<HTMLVideoElement>,
-  videoId: string  
+  videoId: string
 ) {
+  // 누적 카운트 및 구간 ref
   const badPostureCountsRef = useRef<Record<PostureReason, number>>({
     shoulder: 0,
     headDown: 0,
     ear: 0,
     gaze: 0,
   });
+  const badPostureSegmentsRef = useRef<PostureSegment[]>([]);
 
-  const badPostureSegmentsRef = useRef<{ reason: PostureReason; start: number; end: number }[]>([]);
-  let startBadTime: number | null = null;
-  let currentReason: PostureReason | null = null;
+  // 자세 감지 내부 상태
+  const startBadTimeRef = useRef<number | null>(null);
+  const currentReasonRef = useRef<PostureReason | null>(null);
 
   useEffect(() => {
     if (!videoRef.current) return;
 
+    // 미디어파이프 세팅
     const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
     });
-
     const faceMesh = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
     });
@@ -39,7 +47,6 @@ export function usePostureTracking(
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5,
     });
-
     faceMesh.setOptions({
       refineLandmarks: true,
       minDetectionConfidence: 0.5,
@@ -98,27 +105,30 @@ export function usePostureTracking(
       else if (headDown) reason = 'headDown';
       else if (gazeOff) reason = 'gaze';
 
+      // bad posture 감지 (3초 이상 유지 시만 기록)
       if (reason) {
-        if (!startBadTime || currentReason !== reason) {
-          startBadTime = Date.now();
-          currentReason = reason;
-        } else if (Date.now() - startBadTime > 3000) {
+        if (
+          startBadTimeRef.current === null ||
+          currentReasonRef.current !== reason
+        ) {
+          startBadTimeRef.current = Date.now();
+          currentReasonRef.current = reason;
+        } else if (Date.now() - (startBadTimeRef.current ?? 0) > 3000) {
           const end = getVideoTime();
           const start = end - 3;
-
           badPostureSegmentsRef.current.push({ reason, start, end });
           badPostureCountsRef.current[reason]++;
-          console.warn(`⚠️ 나쁜 자세 감지 (${reason}) → count:`, badPostureCountsRef.current[reason]);
-
-          startBadTime = null;
-          currentReason = null;
+          // console.warn(`⚠️ 나쁜 자세 감지 (${reason}) count:`, badPostureCountsRef.current[reason]);
+          startBadTimeRef.current = null;
+          currentReasonRef.current = null;
         }
       } else {
-        startBadTime = null;
-        currentReason = null;
+        startBadTimeRef.current = null;
+        currentReasonRef.current = null;
       }
     });
 
+    // 영상 프레임 → 분석 → 랜드마크 전달 (3초마다)
     const analyze = async () => {
       const video = videoRef.current;
       if (!video) return;
@@ -136,34 +146,46 @@ export function usePostureTracking(
 
     return () => {
       clearInterval(intervalId);
-
-      (async () => {
-        try {
-          const response = await fetch(
-            // API_BASE + '/posture/' 로 변경
-            `${API_BASE}/posture/`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                videoId,
-                counts:   badPostureCountsRef.current,
-                segments: badPostureSegmentsRef.current,
-              }),
-            }
-          );
-          if (!response.ok) {
-            console.error('❌ posture 전송 시 서버 오류:', response.status);
-          }
-        } catch (e) {
-          console.error('❌ posture 전송 실패:', e);
-        }
-      })();
+      // 더 이상 unmount에서 POST하지 않음, 필요시 별도 호출
     };
   }, [videoRef, videoId]);
+
+  /**
+   * 면접 종료 시점에서 아래 함수 호출!
+   */
+  const sendPostureData = async () => {
+    // 값 유효성 검사
+    const counts = badPostureCountsRef.current;
+    const segments = badPostureSegmentsRef.current;
+    // 아무 데이터도 없으면 서버 호출 생략
+    if (
+      !segments || !Array.isArray(segments) || segments.length === 0 ||
+      !counts || typeof counts !== 'object' || Object.values(counts).every((v) => v === 0)
+    ) {
+      // (원하면) console.log('자세 데이터 없음, POST 생략');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/posture/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId,
+          counts,
+          segments,
+        }),
+      });
+      if (!response.ok) {
+        console.error('❌ posture 전송 시 서버 오류:', response.status);
+      }
+    } catch (e) {
+      console.error('❌ posture 전송 실패:', e);
+    }
+  };
 
   return {
     countsRef: badPostureCountsRef,
     segmentsRef: badPostureSegmentsRef,
+    sendPostureData, // 이 함수를 면접 종료 타이밍에서 직접 await sendPostureData() 해주세요!
   };
 }

@@ -1,5 +1,3 @@
-// src/pages/Login.tsx
-
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -17,6 +15,7 @@ export const Login: React.FC = () => {
   const [errors, setErrors] = useState({ email: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
 
+  // 폼 유효성 검사
   const validateForm = () => {
     const newErrors = { email: "", password: "" };
     let isValid = true;
@@ -38,6 +37,7 @@ export const Login: React.FC = () => {
     return isValid;
   };
 
+  // 로그인 요청 처리
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -51,63 +51,59 @@ export const Login: React.FC = () => {
       });
 
       if (!res.ok) {
+        // 상태 코드에 따른 에러 메시지 설정
         if (res.status === 404) {
-          setErrors(p => ({ ...p, email: "등록되지 않은 이메일입니다" }));
+          setErrors(prev => ({ ...prev, email: "등록되지 않은 이메일입니다" }));
         } else if (res.status === 401) {
-          setErrors(p => ({ ...p, password: "비밀번호가 올바르지 않습니다" }));
+          setErrors(prev => ({ ...prev, password: "비밀번호가 올바르지 않습니다" }));
         } else {
-          setErrors(p => ({ ...p, email: "로그인에 실패했습니다" }));
+          setErrors(prev => ({ ...prev, email: "로그인에 실패했습니다" }));
         }
         return;
       }
 
       const data = await res.json();
-      // ID 토큰을 우선 사용하도록 순서 변경
-      const token = data.id_token ?? data.access_token;
+      // id_token 또는 access_token 사용
+      const token = data.id_token || data.access_token;
       if (!token) {
-        setErrors(p => ({ ...p, email: "토큰이 발급되지 않았습니다" }));
+        setErrors(prev => ({ ...prev, email: "토큰이 정상적으로 발급되지 않았습니다." }));
         return;
       }
 
-      // AuthContext.login 에 ID 토큰 전달
-      login(token);
-
-      // 이메일 저장
-      localStorage.setItem("user_email", formData.email);
-
-      // 로그인 성공 후 리다이렉트
+      // 토큰과 이메일을 AuthContext에 저장 (localStorage 포함)
+      login(token, formData.email);
+      // 로그인 성공 후 메인으로 이동
       navigate("/");
     } catch (err) {
       console.error("로그인 오류:", err);
-      setErrors(p => ({ ...p, email: "서버와의 통신에 실패했습니다" }));
+      setErrors(prev => ({ ...prev, email: "서버와의 통신에 실패했습니다" }));
     } finally {
       setIsLoading(false);
     }
   };
 
+  // 입력값 변경 처리
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(p => ({ ...p, [name]: value }));
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name as keyof typeof errors]) {
-      setErrors(p => ({ ...p, [name]: "" }));
+      setErrors(prev => ({ ...prev, [name]: "" }));
     }
   };
 
   return (
     <Layout noPadding noFooter>
-      <div
-        className="
+      <div className="
           flex items-center justify-center bg-gray-50
           pt-4 pb-12 px-4 sm:px-6 lg:px-8
           min-h-[calc(100vh-92px)]
-        "
-      >
+        ">
         <div className="max-w-md w-full space-y-8 py-12">
           <h2 className="text-center text-3xl font-extrabold text-gray-900">
             로그인
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            아직 계정이 없으신가요?{" "}
+            아직 계정이 없으신가요?{' '}
             <Link
               to="/register"
               className="font-medium text-primary hover:text-primary/90"

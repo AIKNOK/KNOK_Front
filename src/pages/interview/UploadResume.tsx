@@ -10,7 +10,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export const UploadResume: React.FC = () => {
   const navigate = useNavigate();
-  const { token, isAuthenticated } = useAuth();
+  const { token, userEmail, isAuthenticated } = useAuth();
 
   const [resume, setResume] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -26,7 +26,6 @@ export const UploadResume: React.FC = () => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        credentials: "include",
       });
       if (!res.ok) throw new Error("이력서 조회 실패");
       const data = await res.json();
