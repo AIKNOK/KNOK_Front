@@ -58,16 +58,12 @@ const FeedbackReport: React.FC = () => {
     analysis,
     upload_id,     // 이제 videoId 역할
     email_prefix,
-    segments,
     feedbackText,
-    clips: clipsFromNav, // Destructure clips from navigation state
   } = (location.state ?? {}) as {
     analysis: any;
     upload_id: string;
     email_prefix?: string;
-    segments: any[];
     feedbackText: string;
-    clips?: { clipUrl: string; thumbnailUrl: string; feedback: string }[];
   };
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -229,11 +225,26 @@ const FeedbackReport: React.FC = () => {
           }
         };
 
-        // bad_posture_clips API 호출 -> 이제 InterviewSession.tsx에서 받아옴
-        if (segments && segments.length > 0 && clipsFromNav) {
-          setClips(clipsFromNav);
-        } else {
-          setClips([]); // 클립이 없으면 빈 배열로 초기화
+        // bad_posture_clips API 호출
+        try {
+          const clipsRes = await fetch(`${API_BASE}/video/get-clips-and-segments/`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ interview_id: upload_id }),
+          });
+
+          if (!clipsRes.ok) {
+            throw new Error(`Failed to fetch clips and segments: ${clipsRes.statusText}`);
+          }
+          const clipsData = await clipsRes.json();
+          setClips(clipsData.clips || []);
+          // Note: segments are not directly set here as they're not used in the current UI after being fetched.
+        } catch (clipFetchError) {
+          console.error("Error fetching clips and segments:", clipFetchError);
+          setClips([]);
         }
 
         // 자동 PDF 생성 및 업로드
