@@ -1,23 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/shared/Button";
-import { usePostureTracking } from "../../hooks/usePostureTracking";
+import { usePostureTracking, resetPostureBaseline } from "../../hooks/usePostureTracking";
 import { encodeWAV } from "../../utils/encodeWAV";
+import { useAuth } from "../../contexts/AuthContext";
 
 interface Question {
   id: string;
   text: string;
-  type: "technical" | "behavioral";
-  difficulty: "easy" | "medium" | "hard";
-  audio_url?: string; // S3에서 가져온 오디오 URL
+  type: string;
+  difficulty: string;
+  audio_url?: string;
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 const MAX_ANSWER_DURATION = 90;
-const userEmail = localStorage.getItem("user_email") || "anonymous";
-const videoId = `interview_${userEmail}_${Date.now()}`;
-
-// S3 버킷 기본 URL
 const S3_BASE_URL = "https://knok-tts.s3.ap-northeast-2.amazonaws.com/";
 
 export const InterviewSession = () => {
@@ -25,10 +22,12 @@ export const InterviewSession = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const fullVideoChunksRef = useRef<Blob[]>([]);
   const videoPathRef = useRef<string | null>(null);
   const resumeRef = useRef<string>("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const questionVideoChunksRef = useRef<Blob[]>([]); // For per-question video clips
+  const auth = useAuth();
+  const videoId = `interview_${auth.userEmail || "anonymous"}_${Date.now()}`;
 
   const [micConnected, setMicConnected] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
@@ -40,12 +39,9 @@ export const InterviewSession = () => {
   const [transcript, setTranscript] = useState("");
   const [resumeText, setResumeText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [clipsLoading, setClipsLoading] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [uploadId, setUploadId] = useState<string | null>(null);
-  const [difficulty, setDifficulty] = useState<"쉬움" | "중간" | "어려움">(
-    "중간"
-  );
+  const [difficulty, setDifficulty] = useState<"쉬움" | "중간" | "어려움">("중간");
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -55,10 +51,11 @@ export const InterviewSession = () => {
   const recordTimerRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const transcriptRef = useRef<string>("");
+  const interviewStartRef = useRef<number>(0);
+  const questionStartTimeRef = useRef<number>(0);
 
-  const { countsRef, segmentsRef } = usePostureTracking(videoRef, videoId);
+  const { countsRef, segmentsRef } = usePostureTracking(videoRef, videoId, questionStartTimeRef.current);
 
-  // Float32 -> Int16 변환 함수
   const convertFloat32ToInt16 = (buffer: Float32Array): Uint8Array => {
     const result = new Int16Array(buffer.length);
     for (let i = 0; i < buffer.length; i++) {
@@ -68,7 +65,7 @@ export const InterviewSession = () => {
     return new Uint8Array(result.buffer);
   };
 
-  // ───── 미디어(비디오+오디오) 설정 ─────
+  // 초기 미디어 설정 (카메라, 마이크 레벨 측정)
   useEffect(() => {
     setRecordTime(0);
     let analyser: AnalyserNode;
@@ -97,12 +94,11 @@ export const InterviewSession = () => {
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
         source.connect(analyser);
-
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
         const draw = () => {
           analyser.getByteFrequencyData(dataArray);
-          const avg =
-            dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+          const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
           setMicLevel(Math.min(100, (avg / 255) * 100));
           animId = requestAnimationFrame(draw);
         };
@@ -121,182 +117,179 @@ export const InterviewSession = () => {
     };
   }, [navigate]);
 
-  // ───── 면접 시작 ─────
-const onStart = async () => {
-  const token =
-    localStorage.getItem("id_token") || localStorage.getItem("access_token");
-  if (!token) return alert("로그인이 필요합니다.");
-  setIsLoading(true);
+  // 면접 시작 핸들러
+  const onStart = async () => {
+    const token = auth.token; // Use auth.token
+    if (!token) return alert("로그인이 필요합니다.");
+    setIsLoading(true);
+    try {
+      // 1. 선택한 난이도로 새 질문 생성 요청
+      // 백엔드에서 질문 생성 및 TTS 서버 호출까지 처리
+      const generateRes = await fetch(`${API_BASE}/generate-resume-questions/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ difficulty }),
+      });
 
-  try {
-    // 1. 선택한 난이도로 새 질문 생성 요청
-    // 백엔드에서 질문 생성 및 TTS 서버 호출까지 처리
-    const generateRes = await fetch(`${API_BASE}/generate-resume-questions/`, {
+      if (!generateRes.ok) {
+        throw new Error(`질문 생성 실패: ${generateRes.statusText || String(generateRes.status)}`);
+      }
+
+      const genResJson = await generateRes.json();
+      console.log("새 질문 생성 완료:", genResJson);
+
+      // 2. TTS 서버가 음성 파일을 생성할 시간 확보
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // 3. 생성된 질문 가져오기
+      const qRes = await fetch(`${API_BASE}/get_all_questions`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!qRes.ok) throw new Error(qRes.statusText || String(qRes.status));
+      const { questions: questionMap } = await qRes.json();
+
+      // 4. 오디오 URL과 함께 질문 목록 구성
+      const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous"; // 사용자 식별자
+      const filteredQuestionList = (Object.entries(questionMap) as [string, string][])
+        .map(([id, text]) => {
+          const audioUrl = `${S3_BASE_URL}${email}/${id}.wav`;
+          return {
+            id,
+            text: text as string,
+            type: "behavioral",
+            difficulty: "medium",
+            audio_url: audioUrl,
+          };
+        });
+
+      // 5. 자기소개 질문이 맨 앞으로 오도록 정렬
+      const sortedQuestionList = [...filteredQuestionList].sort((a, b) => {
+        if (a.text.includes("자기소개")) return -1;
+        if (b.text.includes("자기소개")) return 1;
+
+        const getNumericId = (id: string) => {
+          const match = id.match(/\d+/);
+          return match ? parseInt(match[0]) : Number.MAX_SAFE_INTEGER;
+        };
+        return getNumericId(a.id) - getNumericId(b.id);
+      });
+
+      setQuestions(sortedQuestionList);
+      console.log("정렬된 질문 목록:", sortedQuestionList);
+
+      // 6. 이력서 텍스트 미리 불러오기
+      try {
+        const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (rRes.ok) {
+          const { resume_text } = await rRes.json();
+          setResumeText(resume_text || "");
+          resumeRef.current = resume_text || "";
+        }
+      } catch (resumeError) {
+        console.error("이력서 텍스트 가져오기 실패:", resumeError);
+      }
+
+      // 7. 질문 인덱스 초기화 및 면접 시작
+      setQIdx(0);
+      setIsInterviewActive(true);
+      interviewStartRef.current = Date.now();
+      questionStartTimeRef.current = Date.now(); // Initialize for the first question
+
+      // 8. 전체 면접 영상 녹화 시작 (이 부분은 이제 삭제)
+      // if (streamRef.current) {
+      //   fullVideoChunksRef.current = [];
+      //   const recorder = new MediaRecorder(streamRef.current, {
+      //     mimeType: "video/webm",
+      //   });
+      //   mediaRecorderRef.current = recorder;
+      //   recorder.ondataavailable = (e) => {
+      //     if (e.data.size > 0) fullVideoChunksRef.current.push(e.data);
+      //   };
+      //   recorder.start();
+      // }
+    } catch (err) {
+      console.error("면접 시작 실패:", err);
+      alert("면접 시작 중 오류가 발생했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 꼬리 질문 API 호출 함수
+  const decideFollowup = async (
+    userAnswer: string,
+    questionIndex: number
+  ): Promise<boolean> => {
+    const token = auth.token; // Use auth.token
+    if (!token || !resumeRef.current) return false;
+    console.log("🚀 decideFollowup() 호출됨");
+    const payload = {
+      resume_text: resumeRef.current,
+      user_answer: userAnswer.trim(),
+      base_question_number: parseInt(questions[questionIndex].id.match(/\d+/)?.[0] || "0", 10),
+      interview_id: videoId,
+      existing_question_numbers: questions.map((q) => q.id),
+    };
+
+    console.log("▶ 꼬리질문 API 호출 직전 payload:", payload);
+    const res = await fetch(`${API_BASE}/followup/check/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        difficulty,
-      }),
+      body: JSON.stringify(payload),
     });
 
-    if (!generateRes.ok) {
-      const errorText = await generateRes.text();
-      throw new Error(`질문 생성 실패: ${errorText}`);
+    console.log(`▶ followup/check 상태코드: ${res.status}`);
+
+    if (!res.ok) {
+      console.error("▶ follow-up check failed:", res.status, res.statusText);
+      return false;
     }
 
-    const genResJson = await generateRes.json();
-    console.log("새 질문 생성 완료:", genResJson);
+    const data = await res.json();
 
-    // 2. TTS 서버가 음성 파일을 생성할 시간 확보
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    console.log("🧠 [FOLLOW-UP 디버그]");
+    console.log("1️⃣ 전체 키워드 목록:", data.keywords || "(없음)");
+    console.log("2️⃣ 답변에서 매칭된 키워드:", data.matched_keywords || "(없음)");
+    console.log("3️⃣ Follow-up 필요 여부:", data.followup);
 
-    // 3. 생성된 질문 가져오기
-    const qRes = await fetch(`${API_BASE}/get_all_questions`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!qRes.ok) throw new Error(await qRes.text());
-    const { questions: questionMap } = await qRes.json();
-
-    // 4. 오디오 URL과 함께 질문 목록 구성
-    const email = userEmail.split("@")[0]; // 사용자 식별자
-    const filteredQuestionList = (Object.entries(questionMap) as [string, string][])
-      .map(([id, text]) => {
-        // 오디오 URL 생성 - 중복된 'questions' 제거, 올바른 형식으로 수정
-        const audioUrl = `${S3_BASE_URL}${email}/${id}.wav`;
-        return {
-          id,
-          text: text as string,
-          type: "behavioral" as const,
-          difficulty: "medium" as const,
-          audio_url: audioUrl,
-        };
+    if (data.followup && data.question && data.question_number) {
+      setQuestions((prev) => {
+        const updated = [
+          ...prev.slice(0, questionIndex + 1),
+          {
+            id: data.question_number,
+            text: data.question,
+            type: "behavioral",
+            difficulty: "medium",
+            audio_url: data.audio_url,
+          },
+          ...prev.slice(questionIndex + 1),
+        ];
+        setQIdx(questionIndex + 1);
+        return updated;
       });
-
-    // 5. 자기소개 질문이 맨 앞으로 오도록 정렬
-    const sortedQuestionList = [...filteredQuestionList].sort((a, b) => {
-      if (a.text.includes("자기소개")) return -1;
-      if (b.text.includes("자기소개")) return 1;
-
-      const getNumericId = (id: string) => {
-        const match = id.match(/\d+/);
-        return match ? parseInt(match[0]) : Number.MAX_SAFE_INTEGER;
-      };
-      return getNumericId(a.id) - getNumericId(b.id);
-    });
-
-    setQuestions(sortedQuestionList);
-    console.log("정렬된 질문 목록:", sortedQuestionList);
-
-    // 6. 이력서 텍스트 미리 불러오기
-    try {
-      const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (rRes.ok) {
-        const { resume_text } = await rRes.json();
-        setResumeText(resume_text || "");
-        resumeRef.current = resume_text || "";
-      }
-    } catch (resumeError) {
-      console.error("이력서 텍스트 가져오기 실패:", resumeError);
+      return true;
     }
 
-    // 7. 질문 인덱스 초기화 및 면접 시작
-    setQIdx(0);
-    setIsInterviewActive(true);
-
-    // 8. 전체 면접 영상 녹화 시작
-    if (streamRef.current) {
-      mediaRecorderRef.current = new MediaRecorder(streamRef.current, {
-        mimeType: "video/webm",
-      });
-      mediaRecorderRef.current.ondataavailable = (ev) => {
-        if (ev.data.size > 0) fullVideoChunksRef.current.push(ev.data);
-      };
-      mediaRecorderRef.current.start();
-    }
-  } catch (err) {
-    console.error("면접 시작 실패:", err);
-    alert("면접 시작 중 오류가 발생했습니다.");
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-// ───── 꼬리 질문 API 호출 함수 ─────
-const decideFollowup = async (
-  userAnswer: string,
-  questionIndex: number
-): Promise<boolean> => {
-  const token =
-    localStorage.getItem("id_token") || localStorage.getItem("access_token");
-  if (!token || !resumeRef.current) return false;
-  console.log("🚀 decideFollowup() 호출됨");
-  const payload = {
-    resume_text: resumeRef.current,
-    user_answer: userAnswer.trim(),
-    base_question_number: parseInt(questions[questionIndex].id.match(/\d+/)?.[0] || "0", 10),
-    interview_id: videoId,
-    existing_question_numbers: questions.map((q) => q.id),
+    return false;
   };
 
-  console.log("▶ 꼬리질문 API 호출 직전 payload:", payload);
 
-  const res = await fetch(`${API_BASE}/followup/check/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  console.log(`▶ followup/check 상태코드: ${res.status}`);
-
-  if (!res.ok) {
-    console.error("▶ follow-up check failed:", res.status, await res.text());
-    return false;
-  }
-
-  const data = await res.json();
-
-  console.log("🧠 [FOLLOW-UP 디버그]");
-  console.log("1️⃣ 전체 키워드 목록:", data.keywords || "(없음)");
-  console.log("2️⃣ 답변에서 매칭된 키워드:", data.matched_keywords || "(없음)");
-  console.log("3️⃣ Follow-up 필요 여부:", data.followup);
-
-  if (data.followup && data.question && data.question_number) {
-    setQuestions((prev) => {
-      const updated = [
-        ...prev.slice(0, questionIndex + 1),
-        {
-          id: data.question_number,
-          text: data.question,
-          type: "behavioral" as const,
-          difficulty: "medium" as const,
-          audio_url: data.audio_url,
-        },
-        ...prev.slice(questionIndex + 1),
-      ];
-      setQIdx(questionIndex + 1);
-      return updated;
-    });
-    return true;
-  }
-
-  return false;
-};
-
-
-  // ───── 질문 인덱스 변경 시 녹음 시작 ─────
+  // 질문 인덱스 변경 시 녹음 시작
   useEffect(() => {
     if (isInterviewActive && questions[qIdx]) {
       // 질문 음성 재생
@@ -305,7 +298,7 @@ const decideFollowup = async (
     // eslint-disable-next-line
   }, [isInterviewActive, qIdx, questions]);
 
-  // ───── 질문 음성 재생 ─────
+  // 질문 음성 재생
   const playQuestionAudio = async () => {
     if (!questions[qIdx]) return;
     
@@ -386,19 +379,20 @@ const decideFollowup = async (
     }
   };
 
-  // ───── 녹음 시작 ─────
+  // 답변 녹취 및 WebSocket 전송
   const startRecording = async () => {
     if (!questions[qIdx] || !streamRef.current) return;
 
+    resetPostureBaseline(); // Reset posture tracking for new question
     setRecordTime(0);
     setIsRecording(true);
     setIsPreparing(false);
 
-    const token =
-      localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    const token = auth.token; // Use auth.token
     const ws = new WebSocket(
-      `ws://localhost:8001/ws/transcribe?email=${userEmail}&question_id=${questions[qIdx].id}&token=${token}`
+      `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${auth.userEmail}&question_id=${questions[qIdx].id}&token=${token}`
     );
+    ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
     ws.onopen = async () => {
@@ -437,7 +431,7 @@ const decideFollowup = async (
       if (data.transcript) {
         setTranscript((prev) => {
           const updated = prev + data.transcript + "\n";
-          transcriptRef.current = updated;  // ✅ 여기에 추가
+          transcriptRef.current = updated;
           return updated;
         });
       }
@@ -446,7 +440,7 @@ const decideFollowup = async (
     ws.onclose = () => console.log("WebSocket 종료");
   };
 
-  // ───── 녹음 종료 & 업로드 & 꼬리질문 ─────
+  // 녹음 종료 & 업로드 & 꼬리질문
   const stopRecording = async () => {
     console.log("🛑 stopRecording() 실행됨");
     console.log("📝 transcript 내용:", transcript);
@@ -455,6 +449,56 @@ const decideFollowup = async (
     setIsRecording(false);
     setIsPreparing(true);
 
+    // 비디오 녹화 종료 (개별 질문 클립)
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      await new Promise((res) => setTimeout(res, 300));
+      const videoBlob = new Blob(questionVideoChunksRef.current, { type: "video/webm" });
+      const videoFile = new File([videoBlob], "clip.webm", { type: "video/webm" });
+      const clipForm = new FormData();
+      clipForm.append("video", videoFile);
+      clipForm.append("interview_id", videoId);
+      clipForm.append("question_id", questions[qIdx].id);
+      const token = auth.token; // Use auth.token
+      await fetch(`${API_BASE}/video/upload-question-clip/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: clipForm,
+      }).catch(console.error);
+    }
+
+    // Posture segments upload for the current question
+    const duration = recordTime;
+    const relSegments = segmentsRef.current
+      .filter((s) => s.start < duration && s.end > 0)
+      .map((s) => ({
+        start: Math.max(0, s.start),
+        end:   Math.min(duration, s.end),
+      }));
+
+    if (relSegments.length > 0) {
+      const segmentPayload = {
+        interview_id: videoId,
+        question_id: questions[qIdx].id,
+        segments: relSegments,
+        feedbacks: relSegments.map(() => ""),
+      };
+      const token = auth.token; // Use auth.token
+      await fetch(`${API_BASE}/video/extract-question-clip-segments/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(segmentPayload),
+      });
+    } else {
+      console.log(`Q${qIdx + 1}에는 posture 이상 구간이 없어 클립 분할을 건너뜁니다.`);
+    }
+
+    // WebSocket 종료
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(new TextEncoder().encode("END"));
       await new Promise((res) => setTimeout(res, 300));
@@ -462,8 +506,8 @@ const decideFollowup = async (
     }
     processorRef.current?.disconnect();
 
-    const token =
-      localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    // 오디오 업로드
+    const token = auth.token; // Use auth.token
     const wavBlob = encodeWAV(
       audioChunksRef.current.reduce((acc, cur) => {
         const tmp = new Float32Array(acc.length + cur.length);
@@ -473,152 +517,101 @@ const decideFollowup = async (
       }, new Float32Array()),
       16000
     );
-    const form = new FormData();
-    form.append(
-      "audio",
-      new File([wavBlob], "answer.wav", { type: "audio/wav" })
-    );
-    form.append("transcript", new Blob([transcript], { type: "text/plain" }));
-    form.append("email", userEmail);
-    form.append("question_id", questions[qIdx].id);
+    const audioForm = new FormData();
+    audioForm.append("audio", new File([wavBlob], "answer.wav", { type: "audio/wav" }));
+    audioForm.append("transcript", new Blob([transcriptRef.current], { type: "text/plain" }));
+    audioForm.append("email", auth.userEmail || "anonymous");
+    audioForm.append("question_id", questions[qIdx].id);
     await fetch(`${API_BASE}/audio/upload/`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: audioForm,
     }).catch(console.error);
 
-    console.log("📝 transcript 내용:", transcriptRef.current);
+    // 추가 질문 여부
     if (transcriptRef.current.trim()) {
-      await decideFollowup(transcriptRef.current, qIdx);  // ✅ 여기서도 ref 사용
-      console.log("📋 transcript.trim().length:", transcriptRef.current.trim().length);
+      await decideFollowup(transcriptRef.current, qIdx);
     }
+
     setIsPreparing(false);
-    // no need to call handleNext here; qIdx already moved if followup
-
-    // ─── 전체 영상 업로드 등 나머지 로직 ───
-    if (mediaRecorderRef.current && qIdx === questions.length - 1) {
-      const recorder = mediaRecorderRef.current;
-      setClipsLoading(true);
-      recorder.onstop = async () => {
-        try {
-          const fullBlob = new Blob(fullVideoChunksRef.current, {
-            type: "video/webm",
-          });
-          const vf = new FormData();
-          vf.append("video", fullBlob, `${videoId}.webm`);
-          vf.append("videoId", videoId);
-          const r1 = await fetch(`${API_BASE}/video/upload/`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: vf,
-          });
-          if (!r1.ok) throw new Error(await r1.text());
-          const { video_path } = await r1.json();
-          videoPathRef.current = video_path;
-
-          const payload = {
-            videoId,
-            segments: segmentsRef.current,
-            feedbacks: segmentsRef.current.map(() => ""),  // 일단 빈 문자열 배열로 채움
-          }
-          console.log("▶ extract-clips payload:", payload);
-
-
-          // extract-clips API 호출 시 오류 처리 개선
-          // 백엔드 요구사항에 맞게 필드명 수정 (videoId, segments, feedbacks 필수)
-          const extractClipsPayload = {
-            videoId: videoId, // video_id -> videoId로 다시 변경
-            segments: segmentsRef.current,
-            video_path: video_path, // 필요한 경우 유지
-            feedbacks: segmentsRef.current.map(() => "") // 빈 피드백 배열 추가 (필수 필드)
-          };
-          console.log("▶ extract-clips 요청 데이터:", extractClipsPayload);
-          
-          const extractRes = await fetch(`${API_BASE}/video/extract-clips/`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(extractClipsPayload),
-          });
-          
-          if (!extractRes.ok) {
-            const errorText = await extractRes.text();
-            console.error("▶ extract-clips API 오류:", extractRes.status, errorText);
-            throw new Error(`클립 추출 API 실패: ${extractRes.status} ${errorText}`);
-          }
-          console.log("▶ extract-clips API 성공");
-
-          // analyze-voice API 호출 - 원본 코드 패턴으로 단순화
-          // 원본 코드에서는 upload_id와 posture_count만 전송
-          if (!uploadId) {
-            console.error("❌ upload_id가 없습니다. 웹소켓에서 upload_id를 받지 못했을 수 있습니다.");
-            throw new Error("upload_id가 없어 분석을 진행할 수 없습니다.");
-          }
-          
-          const analyzePayload = {
-            upload_id: uploadId, // 웹소켓에서 받은 upload_id 사용
-            posture_count: countsRef.current
-          };
-          console.log("▶ analyze-voice 요청 데이터:", analyzePayload);
-          
-          const r2 = await fetch(`${API_BASE}/analyze-voice/`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(analyzePayload),
-          });
-          
-          if (!r2.ok) {
-            const errorText = await r2.text();
-            console.error("▶ analyze-voice API 오류:", r2.status, errorText);
-            throw new Error(`분석 API 실패: ${r2.status} ${errorText}`);
-          }
-          const { analysis } = await r2.json();
-          setClipsLoading(false);
-
-          navigate("/interview/feedback", {
-            state: {
-              upload_id: videoId,
-              segments: segmentsRef.current,
-              analysis,
-            },
-          });
-        } catch (e) {
-          console.error(e);
-          alert("전체 영상 업로드 실패");
-          setClipsLoading(false);
-        }
-      };
-      recorder.stop();
-    }
+    audioChunksRef.current = [];
+    questionVideoChunksRef.current = []; // Clear for next question
   };
 
-  // ───── 면접 종료 처리 함수 추가 ─────
+  // 면접 종료
   const endInterview = async () => {
-    const token =
-      localStorage.getItem("id_token") || localStorage.getItem("access_token");
+    const token = auth.token; // Use auth.token
+    if (!token) return;
+
+    // Final full interview video processing (이제 전체 영상 업로드 안함)
+    if (!uploadId) {
+      console.warn("Upload ID가 없어 최종 분석을 건너뛰고 피드백 페이지로 이동합니다.");
+    }
     
-    // 프론트엔드 상태 초기화
-    setQuestions([]);  // 질문 목록 초기화
-    setQIdx(0);        // 질문 인덱스 초기화
+    // Existing posture analysis upload remains (countsRef.current)
+    // This part should still be done to analyze voice data after last question
+    if (uploadId && countsRef.current) {
+        try {
+            const analyzePayload = {
+                upload_id: uploadId,
+                posture_count: countsRef.current,
+            };
+            console.log("▶ Final analyze-voice 요청 데이터:", analyzePayload);
+
+            const r2 = await fetch(`${API_BASE}/analyze-voice/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(analyzePayload),
+            });
+
+            if (!r2.ok) {
+                const errorText = r2.statusText || String(r2.status);
+                console.error("▶ analyze-voice API 오류:", r2.status, errorText);
+                throw new Error(`분석 API 실패: ${errorText}`);
+            }
+            const { analysis } = await r2.json();
+            navigate("/interview/feedback", {
+                state: {
+                    upload_id: videoId, // Use videoId as interview_id
+                    segments: [], // Segments will be fetched in FeedbackReport
+                    analysis,
+                    clips: [], // Clips will be fetched in FeedbackReport
+                },
+            });
+        } catch (e) {
+            console.error("최종 분석 실패:", e);
+            alert("최종 분석 실패");
+        }
+    } else {
+        navigate("/interview/feedback", {
+            state: {
+                upload_id: videoId,
+                segments: [],
+                analysis: {},
+                clips: [],
+            },
+        });
+    }
+
+    setQuestions([]);
+    setQIdx(0);
     setIsInterviewActive(false);
     setTranscript("");
     audioChunksRef.current = [];
-    
-    // 오디오 정지
+
     if (audioRef.current) {
       audioRef.current.pause();
       setIsPlayingAudio(false);
     }
   };
 
-  // ───── 다음 질문 또는 면접 종료 ─────
+  // 다음 질문 혹은 면접 종료
   const handleNext = async () => {
-    // 오디오 재생 중이면 정지
     if (audioRef.current) {
       audioRef.current.pause();
       setIsPlayingAudio(false);
@@ -626,11 +619,25 @@ const decideFollowup = async (
     
     if (isRecording) await stopRecording();
     if (qIdx < questions.length - 1) {
+      resetPostureBaseline(); // Reset posture baseline for the next question
       setQIdx((prev) => prev + 1);
       setTranscript("");
       audioChunksRef.current = [];
+
+      // Start recording for the next question
+      if (streamRef.current) {
+        questionVideoChunksRef.current = []; // Clear chunks for the new question's video
+        const newRecorder = new MediaRecorder(streamRef.current, {
+          mimeType: "video/webm",
+        });
+        newRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) questionVideoChunksRef.current.push(e.data);
+        };
+        newRecorder.start();
+        mediaRecorderRef.current = newRecorder;
+        questionStartTimeRef.current = Date.now(); // Update start time for the new question
+      }
     } else {
-      // 면접 종료 처리
       endInterview();
     }
   };
@@ -638,7 +645,6 @@ const decideFollowup = async (
   return (
     <div className="pt-[92px] relative min-h-screen bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* 비디오 + 자세 영역 */}
         <div className="md:col-span-2">
           <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
             <video
@@ -666,8 +672,6 @@ const decideFollowup = async (
             </div>
           </div>
         </div>
-
-        {/* 질문 & 컨트롤 영역 */}
         <div className="space-y-6">
           {!isInterviewActive ? (
             <div className="bg-gray-800 p-6 rounded-lg">
@@ -675,8 +679,6 @@ const decideFollowup = async (
               <p className="text-gray-400 mb-6">
                 이력서 기반 질문을 가져오고 녹음을 준비합니다.
               </p>
-
-              {/* ✅ 난이도 선택 추가 */}
               <div className="mb-6">
                 <h3 className="text-sm font-medium text-gray-300 mb-2">
                   질문 난이도 선택
@@ -701,7 +703,6 @@ const decideFollowup = async (
                   ))}
                 </div>
               </div>
-
               <Button
                 onClick={onStart}
                 className="w-full"
@@ -743,23 +744,27 @@ const decideFollowup = async (
                 </span>
               </div>
               <p className="text-gray-300">{questions[qIdx]?.text}</p>
-              
-              {/* 음성 재생 상태 표시 */}
               {isPlayingAudio && (
                 <div className="mt-2 flex items-center text-sm text-blue-400">
-                  <svg className="w-4 h-4 mr-1 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071a1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243a1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828a1 1 0 010-1.415z" clipRule="evenodd" />
+                  <svg
+                    className="w-4 h-4 mr-1 animate-pulse"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071a1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243a1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828a1 1 0 010-1.415z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                   질문 음성 재생 중...
                 </div>
               )}
-              
               {isRecording && (
                 <p className="mt-4 text-sm text-gray-400">
                   남은 답변 시간: {MAX_ANSWER_DURATION - recordTime}초
                 </p>
               )}
-              
               <Button
                 variant="outline"
                 className="w-full mt-4"
@@ -772,8 +777,7 @@ const decideFollowup = async (
           )}
         </div>
       </div>
-
-      {(isLoading || clipsLoading) && (
+      {(isLoading) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-8 text-center max-w-xs mx-4 space-y-4">
             <h3 className="text-gray-900 text-lg font-semibold">
@@ -800,8 +804,6 @@ const decideFollowup = async (
           </div>
         </div>
       )}
-      
-      {/* 오디오 요소를 DOM에 추가 */}
       <audio ref={audioRef} hidden />
     </div>
   );

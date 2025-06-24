@@ -1,5 +1,5 @@
 // src/services/auth.ts
-import { publicApi, privateApi } from './api';
+import { publicApi } from './api';
 
 export interface RegisterRequest {
   email: string;
@@ -14,6 +14,8 @@ export interface LoginRequest {
 export interface AuthResponse {
   message: string;
   token?: string;
+  id_token?: string;
+  access_token?: string;
 }
 
 export interface EmailConfirmRequest {
@@ -37,14 +39,12 @@ export const authApi = {
   // 🔓 로그인 (공개)
   login: async (data: LoginRequest): Promise<AuthResponse> => {
     const response = await publicApi.post<AuthResponse>('/login/', data);
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
-    }
+    // 토큰 저장은 AuthContext에서 처리하므로 여기서는 제거
     return response.data;
   },
 
-  // 🔐 로그아웃 (토큰 삭제)
+  // 🔐 로그아웃 (토큰 삭제는 AuthContext에서 처리)
   logout: () => {
-    localStorage.removeItem('token');
+    // setAuthToken(null) 호출은 AuthContext에서 처리
   },
 };
