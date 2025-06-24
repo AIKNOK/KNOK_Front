@@ -417,13 +417,6 @@ export const InterviewSession = () => {
       }&question_id=${questions[qIdx].id}&token=${token}`
     );
 
-    console.log("🧪 WebSocket 연결 정보", {
-      baseUrl: import.meta.env.VITE_WEBSOCKET_BASE_URL,
-      email: auth.userEmail,
-      questionId: questions[qIdx]?.id,
-      token: token,
-    });
-
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
