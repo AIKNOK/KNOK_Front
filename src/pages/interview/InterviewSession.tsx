@@ -30,8 +30,11 @@ export const InterviewSession = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const questionVideoChunksRef = useRef<Blob[]>([]); // For per-question video clips
   const auth = useAuth();
-  const videoId = `interview_${auth.userEmail || "anonymous"}_${Date.now()}`;
-
+  const videoIdRef = useRef(
+    `interview_${auth.userEmail||"anonymous"}_${Date.now()}`
+  );
+  const videoId = videoIdRef.current;
+  
   const [micConnected, setMicConnected] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [isInterviewActive, setIsInterviewActive] = useState(false);
@@ -489,7 +492,7 @@ export const InterviewSession = () => {
       clipForm.append("interview_id", videoId);
       clipForm.append("question_id", questions[qIdx].id);
       const token = auth.token; // Use auth.token
-      await fetch(`${API_BASE}/video/upload-question-clip/`, {
+      await fetch(`${API_BASE}/interview/video/upload-question-clip/`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
