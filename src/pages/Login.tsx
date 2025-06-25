@@ -102,61 +102,48 @@ export const Login: React.FC = () => {
 
   return (
     <Layout noPadding noFooter>
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
-          <div>
-            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-              로그인
-            </h2>
-            <p className="mt-2 text-center text-sm text-gray-600">
-              또는{" "}
-              <Link
-                to="/register"
-                className="font-medium text-indigo-600 hover:text-indigo-500"
-              >
-                회원가입
-              </Link>
-            </p>
-          </div>
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div className="rounded-md shadow-sm -space-y-px">
-              <div>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  placeholder="이메일 주소"
-                  value={formData.email}
-                  onChange={handleChange}
-                  error={errors.email}
-                />
-              </div>
-              <div className="mt-4">
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  placeholder="비밀번호"
-                  value={formData.password}
-                  onChange={handleChange}
-                  error={errors.password}
-                />
-              </div>
-            </div>
+      <div
+        // 헤더 높이(예: 64px)를 뺀 나머지 높이로 설정
+        style={{ minHeight: 'calc(100vh - 64px)' }}
+        className="flex items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8"
+      >
+        <div className="max-w-md w-full space-y-6">
+          <h2 className="text-center text-3xl font-extrabold text-gray-900">
+            로그인
+          </h2>
+          <p className="text-center text-sm text-gray-600 mb-6">
+            또는{" "}
+            <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
+              회원가입
+            </Link>
+          </p>
 
-            <div>
-              <Button
-                type="submit"
-                fullWidth
-                isLoading={isLoading}
-              >
-                {isLoading ? "로그인 중..." : "로그인"}
-              </Button>
-            </div>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              placeholder="이메일 주소"
+              value={formData.email}
+              onChange={handleChange}
+              error={errors.email}
+            />
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              placeholder="비밀번호"
+              value={formData.password}
+              onChange={handleChange}
+              error={errors.password}
+            />
+            <Button type="submit" fullWidth isLoading={isLoading}>
+              {isLoading ? "로그인 중..." : "로그인"}
+            </Button>
           </form>
         </div>
       </div>
