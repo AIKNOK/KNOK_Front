@@ -77,56 +77,69 @@ export const InterviewSession = () => {
     return new Uint8Array(result.buffer);
   };
 
+  const setupMedia = async (
+    videoRef: React.RefObject<HTMLVideoElement>,
+    streamRef: React.MutableRefObject<MediaStream | null>,
+    setMicConnected: (val: boolean) => void,
+    setMicLevel: (val: number) => void,
+    audioContextRef: React.MutableRefObject<AudioContext | null>,
+    navigate: ReturnType<typeof useNavigate>
+  ) => {
+    let analyser: AnalyserNode;
+    let animId: number;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: { channelCount: 1, sampleRate: 16000, sampleSize: 16 },
+      });
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      streamRef.current = stream;
+      setMicConnected(true);
+
+      const AudioCtx =
+        (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return alert("AudioContext 미지원");
+
+      const audioCtx = new AudioCtx({ sampleRate: 16000 });
+      audioContextRef.current = audioCtx;
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const draw = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+        setMicLevel(Math.min(100, (avg / 255) * 100));
+        animId = requestAnimationFrame(draw);
+      };
+      draw();
+    } catch (err) {
+      console.error("getUserMedia error:", err);
+      navigate("/interview/check-environment");
+    }
+  };
+
   // 초기 미디어 설정 (카메라, 마이크 레벨 측정)
   useEffect(() => {
     setRecordTime(0);
-    let analyser: AnalyserNode;
-    let animId: number;
-    let mediaStream: MediaStream | null = null;
 
-    const setupMedia = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: { channelCount: 1, sampleRate: 16000, sampleSize: 16 },
-        });
-        if (videoRef.current) videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        mediaStream = stream;
-        setMicConnected(true);
+    setupMedia(
+      videoRef,
+      streamRef,
+      setMicConnected,
+      setMicLevel,
+      audioContextRef,
+      navigate
+    );
 
-        const AudioCtx =
-          (window as any).AudioContext || (window as any).webkitAudioContext;
-        if (!AudioCtx) return alert("AudioContext 미지원");
-        const audioCtx = new AudioCtx({ sampleRate: 16000 });
-        audioContextRef.current = audioCtx;
-        if (audioCtx.state === "suspended") await audioCtx.resume();
-
-        const source = audioCtx.createMediaStreamSource(stream);
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-        const draw = () => {
-          analyser.getByteFrequencyData(dataArray);
-          const avg =
-            dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
-          setMicLevel(Math.min(100, (avg / 255) * 100));
-          animId = requestAnimationFrame(draw);
-        };
-        draw();
-      } catch (err) {
-        console.error("getUserMedia error:", err);
-        navigate("/interview/check-environment");
-      }
-    };
-
-    setupMedia();
     return () => {
-      cancelAnimationFrame(animId);
       audioContextRef.current?.close();
-      mediaStream?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, [navigate]);
 
@@ -406,7 +419,24 @@ export const InterviewSession = () => {
 
   // 답변 녹취 및 WebSocket 전송
   const startRecording = async () => {
-    if (!questions[qIdx] || !streamRef.current) return;
+    //if (!questions[qIdx] || !streamRef.current) return;
+    if (!questions[qIdx]) return;
+
+    if (!streamRef.current) {
+      console.warn("⚠️ streamRef 없음, setupMedia 재실행");
+      await setupMedia(
+        videoRef,
+        streamRef,
+        setMicConnected,
+        setMicLevel,
+        audioContextRef,
+        navigate
+      ); // 이미 있는 함수일 것
+      if (!streamRef.current) {
+        console.error("❌ 여전히 stream 없음 — 녹음 불가");
+        return;
+      }
+    }
 
     resetPostureBaseline(); // Reset posture tracking for new question
     setRecordTime(0);
@@ -430,7 +460,15 @@ export const InterviewSession = () => {
       }
 
       const audioCtx = audioContextRef.current!;
-      if (audioCtx.state === "suspended") await audioCtx.resume();
+      //if (audioCtx.state === "suspended") await audioCtx.resume();
+      if (audioCtx.state === "suspended") {
+        try {
+          await audioCtx.resume();
+          console.log("🔊 AudioContext resumed");
+        } catch (e) {
+          console.error("❌ AudioContext resume 실패", e);
+        }
+      }
 
       const source = audioCtx.createMediaStreamSource(streamRef.current!);
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
