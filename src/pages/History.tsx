@@ -96,7 +96,9 @@ const History: React.FC = () => {
     ).padStart(2, '0')}`;
 
     const filename = `${formattedDate}_interview.pdf`;
-    saveAs(signedUrl, filename);
+    const response = await fetch(signedUrl);
+    const blob = await response.blob();
+    saveAs(blob, filename);
   } catch (err) {
     console.error("다운로드 실패:", err);
   } finally {
