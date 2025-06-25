@@ -406,6 +406,7 @@ export const InterviewSession = () => {
 
   // 답변 녹취 및 WebSocket 전송
   const startRecording = async () => {
+    if (isRecording) return;
     if (!questions[qIdx] || !streamRef.current) return;
 
     resetPostureBaseline(); // Reset posture tracking for new question
@@ -492,6 +493,7 @@ export const InterviewSession = () => {
     // 비디오 녹화 종료 (개별 질문 클립)
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
       await new Promise((res) => setTimeout(res, 300));
       const videoBlob = new Blob(questionVideoChunksRef.current, {
         type: "video/webm",
