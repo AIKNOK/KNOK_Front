@@ -433,6 +433,16 @@ export const InterviewSession = () => {
       processor.onaudioprocess = (e) => {
         const floatData = e.inputBuffer.getChannelData(0);
 
+        console.log("floatData max abs:", Math.max(...floatData.map(Math.abs)));
+        const pcm = convertFloat32ToInt16(floatData);
+        console.log("PCM length:", pcm.length);
+
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(pcm);
+        }
+
+        audioChunksRef.current.push(new Float32Array(floatData));
+
         // ✅ WebSocket이 열려 있는 경우만 send
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(convertFloat32ToInt16(floatData));
