@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/shared/Button";
-import { usePostureTracking, resetPostureBaseline } from "../../hooks/usePostureTracking";
+import {
+  usePostureTracking,
+  resetPostureBaseline,
+} from "../../hooks/usePostureTracking";
 import { encodeWAV } from "../../utils/encodeWAV";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -53,7 +56,9 @@ export const InterviewSession = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [uploadId, setUploadId] = useState<string | null>(null);
-  const [difficulty, setDifficulty] = useState<"쉬움" | "중간" | "어려움">("중간");
+  const [difficulty, setDifficulty] = useState<"쉬움" | "중간" | "어려움">(
+    "중간"
+  );
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   const { countsRef, segmentsRef } = usePostureTracking(
@@ -83,14 +88,15 @@ export const InterviewSession = () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
-          audio: { channelCount: 1, sampleRate: 16000, sampleSize: 16 }
+          audio: { channelCount: 1, sampleRate: 16000, sampleSize: 16 },
         });
         if (videoRef.current) videoRef.current.srcObject = stream;
         streamRef.current = stream;
         mediaStream = stream;
         setMicConnected(true);
 
-        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        const AudioCtx =
+          (window as any).AudioContext || (window as any).webkitAudioContext;
         if (!AudioCtx) return alert("AudioContext 미지원");
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
@@ -104,7 +110,8 @@ export const InterviewSession = () => {
 
         const draw = () => {
           analyser.getByteFrequencyData(dataArray);
-          const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
+          const avg =
+            dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
           setMicLevel(Math.min(100, (avg / 255) * 100));
           animId = requestAnimationFrame(draw);
         };
@@ -142,7 +149,11 @@ export const InterviewSession = () => {
         }
       );
       if (!generateRes.ok) {
-        throw new Error(`질문 생성 실패: ${generateRes.statusText || String(generateRes.status)}`);
+        throw new Error(
+          `질문 생성 실패: ${
+            generateRes.statusText || String(generateRes.status)
+          }`
+        );
       }
       await new Promise((resolve) => setTimeout(resolve, 3000));
       const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
@@ -159,7 +170,7 @@ export const InterviewSession = () => {
         text,
         type: "behavioral",
         difficulty: "medium",
-        audio_url: `${S3_BASE_URL}${email}/${id}.wav`
+        audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
       }));
 
       // 자기소개 질문 맨 앞으로
@@ -202,13 +213,19 @@ export const InterviewSession = () => {
   };
 
   // 꼬리질문 판단
-  const decideFollowup = async (userAnswer: string, questionIndex: number): Promise<boolean> => {
+  const decideFollowup = async (
+    userAnswer: string,
+    questionIndex: number
+  ): Promise<boolean> => {
     const token = auth.token;
     if (!token || !resumeRef.current) return false;
     const payload = {
       resume_text: resumeRef.current,
       user_answer: userAnswer.trim(),
-      base_question_number: parseInt(questions[questionIndex].id.match(/\d+/)?.[0] || "0", 10),
+      base_question_number: parseInt(
+        questions[questionIndex].id.match(/\d+/)?.[0] || "0",
+        10
+      ),
       interview_id: videoId,
       existing_question_numbers: questions.map((q) => q.id),
     };
@@ -264,7 +281,8 @@ export const InterviewSession = () => {
       if (audioUrl) {
         try {
           const response = await fetch(audioUrl);
-          if (!response.ok) throw new Error(`오디오 fetch 실패: ${response.status}`);
+          if (!response.ok)
+            throw new Error(`오디오 fetch 실패: ${response.status}`);
           const blob = await response.blob();
           const blobUrl = URL.createObjectURL(blob);
           if (!audioRef.current) {
@@ -301,32 +319,26 @@ export const InterviewSession = () => {
 
   // 녹음 및 WebSocket 시작
   const startRecording = async () => {
-    audioChunksRef.current = [];
-    transcriptRef.current = "";
-    setTranscript("");
-    questionVideoChunksRef.current = []; 
-
     if (!questions[qIdx] || !streamRef.current) return;
 
-    resetPostureBaseline();
+    resetPostureBaseline(); // Reset posture tracking for new question
     setRecordTime(0);
     setIsRecording(true);
     setIsPreparing(false);
 
-    const token = auth.token;
-    const wsUrl = `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${auth.userEmail}&question_id=${questions[qIdx].id}&token=${token}`;
-    const ws = new WebSocket(wsUrl);
-
+    const token = auth.token; // Use auth.token
+    const ws = new WebSocket(
+      `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${
+        auth.userEmail
+      }&question_id=${questions[qIdx].id}&token=${token}`
+    );
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
     ws.onopen = async () => {
-      if (processorRef.current) {
-        processorRef.current.disconnect();
-        processorRef.current = null;
-      }
       const audioCtx = audioContextRef.current!;
       if (audioCtx.state === "suspended") await audioCtx.resume();
+      
       const source = audioCtx.createMediaStreamSource(streamRef.current!);
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
@@ -386,8 +398,12 @@ export const InterviewSession = () => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       await new Promise((res) => setTimeout(res, 300));
-      const videoBlob = new Blob(questionVideoChunksRef.current, { type: "video/webm" });
-      const videoFile = new File([videoBlob], "clip.webm", { type: "video/webm" });
+      const videoBlob = new Blob(questionVideoChunksRef.current, {
+        type: "video/webm",
+      });
+      const videoFile = new File([videoBlob], "clip.webm", {
+        type: "video/webm",
+      });
       const clipForm = new FormData();
       clipForm.append("video", videoFile);
       clipForm.append("interview_id", videoId);
@@ -402,10 +418,12 @@ export const InterviewSession = () => {
 
     // 자세 클립 분할
     const duration = recordTime;
-    const relSegments = segmentsRef.current.filter((s) => s.start < duration && s.end > 0).map((s) => ({
-      start: Math.max(0, s.start),
-      end: Math.min(duration, s.end),
-    }));
+    const relSegments = segmentsRef.current
+      .filter((s) => s.start < duration && s.end > 0)
+      .map((s) => ({
+        start: Math.max(0, s.start),
+        end: Math.min(duration, s.end),
+      }));
     if (relSegments.length > 0) {
       const segmentPayload = {
         interview_id: videoId,
@@ -416,7 +434,10 @@ export const InterviewSession = () => {
       const token = auth.token;
       await fetch(`${API_BASE}/video/extract-question-clip-segments/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(segmentPayload),
       });
     }
