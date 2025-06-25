@@ -100,11 +100,8 @@ export const InterviewSession = () => {
         if (!AudioCtx) return alert("AudioContext 미지원");
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
-        if (audioCtx.state === "suspended"){
-          console.log("🔄 오디오 컨텍스트 재시작 중");
-          await audioCtx.resume();
-        } 
-          
+        if (audioCtx.state === "suspended") await audioCtx.resume();
+
         const source = audioCtx.createMediaStreamSource(stream);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
@@ -414,7 +411,6 @@ export const InterviewSession = () => {
 
     resetPostureBaseline(); // Reset posture tracking for new question
     setRecordTime(0);
-    setIsRecording(true);
     setIsPreparing(false);
 
     const token = auth.token; // Use auth.token
@@ -428,7 +424,10 @@ export const InterviewSession = () => {
     wsRef.current = ws;
 
     ws.onopen = async () => {
-      console.log("✅ WebSocket 연결됨");
+      if (uploadId) {
+        ws.send(JSON.stringify({ type: "upload_id", upload_id: uploadId }));
+      }
+      setIsRecording(true);
       const audioCtx = audioContextRef.current!;
       if (audioCtx.state === "suspended") await audioCtx.resume();
 
@@ -476,7 +475,7 @@ export const InterviewSession = () => {
       }
     };
     ws.onerror = (e) => console.error("WebSocket 오류", e);
-    ws.onclose = () => console.log("WebSocket 종료");
+    ws.onclose = (e) => console.log(`WebSocket closed: code=${e.code}, reason=${e.reason}`);
   };
 
   // 녹음 종료 & 업로드 & 꼬리질문
