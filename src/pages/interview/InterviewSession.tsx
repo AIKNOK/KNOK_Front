@@ -301,6 +301,11 @@ export const InterviewSession = () => {
 
   // 녹음 및 WebSocket 시작
   const startRecording = async () => {
+    audioChunksRef.current = [];
+    transcriptRef.current = "";
+    setTranscript("");
+    questionVideoChunksRef.current = []; 
+
     if (!questions[qIdx] || !streamRef.current) return;
 
     resetPostureBaseline();
@@ -326,6 +331,7 @@ export const InterviewSession = () => {
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
       processor.onaudioprocess = (e) => {
+        console.log("🎤 onaudioprocess 호출됨"); // 로그 추가
         const floatData = e.inputBuffer.getChannelData(0);
         const pcm = convertFloat32ToInt16(floatData);
         if (ws.readyState === WebSocket.OPEN) ws.send(pcm);
