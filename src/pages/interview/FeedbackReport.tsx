@@ -185,7 +185,11 @@ const FeedbackReport: React.FC = () => {
 
   // 메인 로직
   useEffect(() => {
-    if (!analysis) return;
+    if (!analysis) {
+      console.error("❌ analysis 없음");
+      return;
+    }
+    console.log("📦 analysis 데이터:", analysis);
     const fetchFeedback = async () => {
       setLoading(true);
       try {
