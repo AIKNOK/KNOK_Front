@@ -100,8 +100,11 @@ export const InterviewSession = () => {
         if (!AudioCtx) return alert("AudioContext 미지원");
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
-        if (audioCtx.state === "suspended") await audioCtx.resume();
-
+        if (audioCtx.state === "suspended"){
+          console.log("🔄 오디오 컨텍스트 재시작 중");
+          await audioCtx.resume();
+        } 
+          
         const source = audioCtx.createMediaStreamSource(stream);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
@@ -424,6 +427,7 @@ export const InterviewSession = () => {
     wsRef.current = ws;
 
     ws.onopen = async () => {
+      console.log("✅ WebSocket 연결됨");
       const audioCtx = audioContextRef.current!;
       if (audioCtx.state === "suspended") await audioCtx.resume();
 
