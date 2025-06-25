@@ -424,6 +424,11 @@ export const InterviewSession = () => {
     wsRef.current = ws;
 
     ws.onopen = async () => {
+      if (processorRef.current) {
+        processorRef.current.disconnect();
+        processorRef.current = null;
+      }
+
       const audioCtx = audioContextRef.current!;
       if (audioCtx.state === "suspended") await audioCtx.resume();
 
@@ -432,10 +437,11 @@ export const InterviewSession = () => {
       processorRef.current = processor;
       processor.onaudioprocess = (e) => {
         const floatData = e.inputBuffer.getChannelData(0);
+        const pcm = convertFloat32ToInt16(floatData);
 
         // ✅ WebSocket이 열려 있는 경우만 send
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(convertFloat32ToInt16(floatData));
+          ws.send(pcm);
         }
 
         audioChunksRef.current.push(new Float32Array(floatData));

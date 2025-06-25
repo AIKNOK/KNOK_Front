@@ -79,7 +79,7 @@ const History: React.FC = () => {
       console.warn("No token found for PDF download.");
       return;
     }
-    const res = await axios.get("${API_BASE}/get-signed-url/", {
+    const res = await axios.get(`${API_BASE}/get-signed-url/`, {
       params: { video_id: videoId },
       headers: {
         Authorization: `Bearer ${token}`,
