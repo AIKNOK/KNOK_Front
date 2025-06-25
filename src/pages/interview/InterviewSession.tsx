@@ -31,10 +31,10 @@ export const InterviewSession = () => {
   const questionVideoChunksRef = useRef<Blob[]>([]); // For per-question video clips
   const auth = useAuth();
   const videoIdRef = useRef(
-    `interview_${auth.userEmail||"anonymous"}_${Date.now()}`
+    `interview_${auth.userEmail || "anonymous"}_${Date.now()}`
   );
   const videoId = videoIdRef.current;
-  
+
   const [micConnected, setMicConnected] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [isInterviewActive, setIsInterviewActive] = useState(false);
@@ -432,9 +432,15 @@ export const InterviewSession = () => {
       processorRef.current = processor;
       processor.onaudioprocess = (e) => {
         const floatData = e.inputBuffer.getChannelData(0);
-        ws.send(convertFloat32ToInt16(floatData));
+
+        // ✅ WebSocket이 열려 있는 경우만 send
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(convertFloat32ToInt16(floatData));
+        }
+
         audioChunksRef.current.push(new Float32Array(floatData));
       };
+
       source.connect(processor);
       processor.connect(audioCtx.destination);
 
