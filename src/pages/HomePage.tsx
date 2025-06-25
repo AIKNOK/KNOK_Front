@@ -13,13 +13,21 @@ import "swiper/css";
 import "swiper/css/autoplay";
 import "swiper/css/pagination";
 
+// src/pages/HomePage.tsx
+import rapaImg     from '../assets/rapa dx.png';
+import jobkoreaImg from '../assets/jobkorea.png';
+import incruitImg  from '../assets/incruit.png';
+import peopleImg   from '../assets/peopleandjob.png';
+import saraminImg  from '../assets/saramin.png';
+
+
 // 취업 공고 사이트 목록
 const jobSites = [
-  { href: "https://edu.rapa.or.kr/recruitment/1250", src: "/public/rapa dx 10기.png", alt: "RAPA DX 11기" },
-  { href: "https://www.jobkorea.co.kr",               src: "/public/잡코리아.png",     alt: "잡코리아" },
-  { href: "https://www.incruit.com",                  src: "/public/인크루트.png",     alt: "인크루트" },
-  { href: "https://www.peoplenjob.com",               src: "/public/피플앤잡.png",     alt: "피플앤잡" },
-  { href: "https://www.saramin.co.kr",                src: "/public/사람인.png",       alt: "사람인" },
+  { href: "https://edu.rapa.or.kr/recruitment/1250", src: rapaImg,  alt: "RAPA DX 11기" },
+  { href: "https://www.jobkorea.co.kr",               src: jobkoreaImg,     alt: "잡코리아" },
+  { href: "https://www.incruit.com",                  src: incruitImg,     alt: "인크루트" },
+  { href: "https://www.peoplenjob.com",               src: peopleImg,     alt: "피플앤잡" },
+  { href: "https://www.saramin.co.kr",                src: saraminImg,       alt: "사람인" },
 ];
 
 const HomePage: React.FC = () => (
