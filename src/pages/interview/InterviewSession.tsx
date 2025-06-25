@@ -411,7 +411,6 @@ export const InterviewSession = () => {
 
     resetPostureBaseline(); // Reset posture tracking for new question
     setRecordTime(0);
-    setIsRecording(true);
     setIsPreparing(false);
 
     const token = auth.token; // Use auth.token
@@ -425,6 +424,10 @@ export const InterviewSession = () => {
     wsRef.current = ws;
 
     ws.onopen = async () => {
+      if (uploadId) {
+        ws.send(JSON.stringify({ type: "upload_id", upload_id: uploadId }));
+      }
+      setIsRecording(true);
       const audioCtx = audioContextRef.current!;
       if (audioCtx.state === "suspended") await audioCtx.resume();
 
@@ -472,7 +475,7 @@ export const InterviewSession = () => {
       }
     };
     ws.onerror = (e) => console.error("WebSocket 오류", e);
-    ws.onclose = () => console.log("WebSocket 종료");
+    ws.onclose = (e) => console.log(`WebSocket closed: code=${e.code}, reason=${e.reason}`);
   };
 
   // 녹음 종료 & 업로드 & 꼬리질문
