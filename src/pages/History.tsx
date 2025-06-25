@@ -33,8 +33,10 @@ const History: React.FC = () => {
         const sort = "created_at";
         const order = sortOrder === "newest" ? "desc" : "asc";
         const token = auth.token;
-        if (!token) return alert("로그인이 필요합니다.");
-        console.log("📡 요청 URL:", `${API_BASE}/feedback/history?sort=${sort}&order=${order}`);
+        if (!token) {
+          console.warn("No token found for history fetch.");
+          return;
+        }
         const res = await axios.get(`${API_BASE}/feedback/history?sort=${sort}&order=${order}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -49,14 +51,12 @@ const History: React.FC = () => {
     fetchData();
   }, [sortOrder, auth.token]);
 
-  const filteredData = Array.isArray(data)
-  ? filterDate
-    ? data.filter((item) => {
-        const itemDate = new Date(item.created_at).toISOString().slice(0, 10);
-        return itemDate === filterDate;
-      })
-    : data
-  : [];
+  const filteredData = filterDate
+  ? data.filter((item) => {
+      const itemDate = new Date(item.created_at).toISOString().slice(0, 10);
+      return itemDate === filterDate;
+    })
+  : data;
 
   const formatKST = (utcDate: string) => {
     const date = new Date(utcDate);
@@ -79,7 +79,7 @@ const History: React.FC = () => {
       console.warn("No token found for PDF download.");
       return;
     }
-    const res = await axios.get${'{API_BASE}/get-signed-url/', {
+    const res = await axios.get("${API_BASE}/get-signed-url/", {
       params: { video_id: videoId },
       headers: {
         Authorization: `Bearer ${token}`,
@@ -150,7 +150,7 @@ const History: React.FC = () => {
           </tr>
         </thead>
         <tbody>
-          {Array.isArray(filteredData) && filteredData.length > 0 ? (
+          {filteredData.length ? (
             filteredData.map((row, index) => (
               <tr key={index} className="border-t">
                 <td className="py-2 px-4">{formatKST(row.created_at)}</td>
