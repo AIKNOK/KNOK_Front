@@ -424,6 +424,15 @@ export const InterviewSession = () => {
     wsRef.current = ws;
 
     ws.onopen = async () => {
+      console.log("✅ WebSocket 연결됨");
+      ws.send(
+        JSON.stringify({
+          type: "start",
+          sample_rate: 16000,
+          interim: true,
+        })
+      );
+      
       if (uploadId) {
         ws.send(JSON.stringify({ type: "upload_id", upload_id: uploadId }));
       }
