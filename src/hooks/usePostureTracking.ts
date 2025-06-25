@@ -169,7 +169,7 @@ export function usePostureTracking(
         }),
       });
     };
-  }, [videoRef, videoId, baseTimeMs]);
+  }, [videoRef, videoId]);
 
   return {
     countsRef,
