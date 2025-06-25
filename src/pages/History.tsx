@@ -87,6 +87,7 @@ const History: React.FC = () => {
     });
     console.log(videoId)
     const signedUrl = res.data.signed_url;
+    console.log("📦 signed_url:", signedUrl);
     const date = new Date(createdAt);
     const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
       date.getDate()
