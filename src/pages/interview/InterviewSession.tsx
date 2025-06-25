@@ -165,7 +165,7 @@ export const InterviewSession = () => {
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // 3. 생성된 질문 가져오기
-      const qRes = await fetch(`${API_BASE}/get_all_questions`, {
+      const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -498,7 +498,7 @@ export const InterviewSession = () => {
       clipForm.append("interview_id", videoId);
       clipForm.append("question_id", questions[qIdx].id);
       const token = auth.token; // Use auth.token
-      await fetch(`${API_BASE}/interview/video/upload-question-clip/`, {
+      await fetch(`${API_BASE}/video/upload-question-clip/`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
