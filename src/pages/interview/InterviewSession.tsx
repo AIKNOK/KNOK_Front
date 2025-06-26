@@ -61,6 +61,7 @@ export const InterviewSession = () => {
   const transcriptRef = useRef<string>("");
   const interviewStartRef = useRef<number>(0);
   const questionStartTimeRef = useRef<number>(0);
+  const uploadIdRef = useRef<string | null>(null);
 
   const { countsRef, segmentsRef } = usePostureTracking(
     videoRef,
@@ -419,9 +420,10 @@ export const InterviewSession = () => {
 
     const token = auth.token; // Use auth.token
     const ws = new WebSocket(
-      `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${
-        auth.userEmail
-      }&question_id=${questions[qIdx].id}&token=${token}`
+      `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${auth.userEmail
+      }&question_id=${questions[qIdx].id}&token=${token}${
+        uploadIdRef.current ? `&upload_id=${uploadIdRef.current}` : ""
+      }`
     );
 
     ws.binaryType = "arraybuffer";
@@ -469,7 +471,10 @@ export const InterviewSession = () => {
     ws.onmessage = (ev) => {
       const data = JSON.parse(ev.data);
       if (data.type === "upload_id") {
-        setUploadId(data.upload_id);
+        if (!uploadIdRef.current) {
+          uploadIdRef.current = data.upload_id;
+          setUploadId(data.upload_id);
+        }
         console.log("✅ upload_id 수신:", data.upload_id);
         return;
       }
