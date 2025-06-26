@@ -100,11 +100,11 @@ export const InterviewSession = () => {
         if (!AudioCtx) return alert("AudioContext 미지원");
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
-        if (audioCtx.state === "suspended"){
+        if (audioCtx.state === "suspended") {
           console.log("🔄 오디오 컨텍스트 재시작 중");
           await audioCtx.resume();
-        } 
-          
+        }
+
         const source = audioCtx.createMediaStreamSource(stream);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
@@ -474,8 +474,13 @@ export const InterviewSession = () => {
       "transcript",
       new Blob([transcriptRef.current], { type: "text/plain" })
     );
+    
     audioForm.append("email", auth.userEmail || "anonymous");
     audioForm.append("question_id", questions[qIdx].id);
+    if (uploadId) {
+      audioForm.append("upload_id", uploadId); // ✅ WebSocket에서 받은 upload_id를 함께 보냄
+    }
+
     await fetch(`${API_BASE}/audio/upload/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
