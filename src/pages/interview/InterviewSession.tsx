@@ -55,7 +55,7 @@ export const InterviewSession = () => {
   const wsRef = useRef<WebSocket | null>(null);
   const audioChunksRef = useRef<Float32Array[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const processorRef = useRef<AudioWorkletNode | ScriptProcessorNode | null>(null);
   const recordTimerRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const transcriptRef = useRef<string>("");
@@ -102,6 +102,7 @@ export const InterviewSession = () => {
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
         if (audioCtx.state === "suspended") await audioCtx.resume();
+        await audioCtx.audioWorklet.addModule('/worklet/pcm-processor.js');
 
         const source = audioCtx.createMediaStreamSource(stream);
         analyser = audioCtx.createAnalyser();
@@ -440,10 +441,9 @@ export const InterviewSession = () => {
       if (audioCtx.state === "suspended") await audioCtx.resume();
 
       const source = audioCtx.createMediaStreamSource(streamRef.current!);
-      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-      processor.onaudioprocess = (e) => {
-        const floatData = e.inputBuffer.getChannelData(0);
+      const workletNode = new AudioWorkletNode(audioCtx, 'pcm-processor');
+      workletNode.port.onmessage = (event) => {
+        const floatData = event.data;
         const pcm = convertFloat32ToInt16(floatData);
 
         // ✅ WebSocket이 열려 있는 경우만 send
@@ -454,8 +454,9 @@ export const InterviewSession = () => {
         audioChunksRef.current.push(new Float32Array(floatData));
       };
 
-      source.connect(processor);
-      processor.connect(audioCtx.destination);
+      source.connect(workletNode);
+      workletNode.connect(audioCtx.destination);
+      processorRef.current = workletNode;
 
       recordTimerRef.current = window.setInterval(() => {
         setRecordTime((prev) => Math.min(prev + 1, MAX_ANSWER_DURATION));
