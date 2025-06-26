@@ -25,10 +25,9 @@ export const InterviewSession = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const videoPathRef = useRef<string | null>(null);
   const resumeRef = useRef<string>("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const questionVideoChunksRef = useRef<Blob[]>([]); // For per-question video clips
+  const questionVideoChunksRef = useRef<Blob[]>([]);
   const auth = useAuth();
   const videoIdRef = useRef(
     `interview_${auth.userEmail || "anonymous"}_${Date.now()}`
@@ -69,6 +68,7 @@ export const InterviewSession = () => {
     questionStartTimeRef.current
   );
 
+  // Float32 → Int16 변환
   const convertFloat32ToInt16 = (buffer: Float32Array): Uint8Array => {
     const result = new Int16Array(buffer.length);
     for (let i = 0; i < buffer.length; i++) {
@@ -77,6 +77,50 @@ export const InterviewSession = () => {
     }
     return new Uint8Array(result.buffer);
   };
+
+    // 🔥 자원 정리 (질문 바뀔 때/면접 종료 등)
+  function cleanupAll() {
+    setIsRecording(false);
+    setIsPlayingAudio(false);
+    setIsPreparing(false);
+    setRecordTime(0);
+
+    // 오디오
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
+    // WebSocket
+    if (wsRef.current) {
+      try { wsRef.current.close(); } catch {}
+      wsRef.current = null;
+    }
+    // 오디오 프로세서
+    if (processorRef.current) {
+      try { processorRef.current.disconnect(); } catch {}
+      processorRef.current = null;
+    }
+    // 녹화
+    if (mediaRecorderRef.current) {
+      try { mediaRecorderRef.current.stop(); } catch {}
+      mediaRecorderRef.current = null;
+    }
+    audioChunksRef.current = [];
+    questionVideoChunksRef.current = [];
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  }
+
+  // 🔥 질문 인덱스 변경시 항상 cleanup + playQuestionAudio
+  useEffect(() => {
+    if (isInterviewActive && questions[qIdx]) {
+      cleanupAll();
+      setTimeout(() => {
+        playQuestionAudio();
+      }, 100); // 아주 짧게 delay, 자원정리 race방지
+    }
+    // eslint-disable-next-line
+  }, [isInterviewActive, qIdx, questions]);
 
   // 초기 미디어 설정 (카메라, 마이크 레벨 측정)
   useEffect(() => {
@@ -110,7 +154,7 @@ export const InterviewSession = () => {
         source.connect(analyser);
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-        const draw = () => {
+         const draw = () => {
           analyser.getByteFrequencyData(dataArray);
           const avg =
             dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
@@ -134,9 +178,14 @@ export const InterviewSession = () => {
 
   // 면접 시작 핸들러
   const onStart = async () => {
-    const token = auth.token; // Use auth.token
+    const token = auth.token;
     if (!token) return alert("로그인이 필요합니다.");
     setIsLoading(true);
+    const today = new Date();
+    const pad = (n: number | string) => String(n).padStart(2, "0");
+    const upload_id = `${pad(today.getMonth() + 1)}${pad(today.getDate())}-${Math.floor(Date.now() / 1000)}`;
+    uploadIdRef.current = upload_id;
+    setUploadId(upload_id);
     try {
       // 1. 선택한 난이도로 새 질문 생성 요청
       // 백엔드에서 질문 생성 및 TTS 서버 호출까지 처리
@@ -159,6 +208,8 @@ export const InterviewSession = () => {
           }`
         );
       }
+
+      await new Promise((resolve) => setTimeout(resolve, 3000)); // TTS 대기
 
       const genResJson = await generateRes.json();
       console.log("새 질문 생성 완료:", genResJson);
@@ -422,9 +473,7 @@ export const InterviewSession = () => {
     const token = auth.token; // Use auth.token
     const ws = new WebSocket(
       `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${auth.userEmail
-      }&question_id=${questions[qIdx].id}&token=${token}${
-        uploadIdRef.current ? `&upload_id=${uploadIdRef.current}` : ""
-      }`
+      }&question_id=${questions[qIdx].id}&token=${token}&upload_id=${uploadIdRef.current}`
     );
 
     ws.binaryType = "arraybuffer";
@@ -681,36 +730,22 @@ export const InterviewSession = () => {
   };
 
   // 다음 질문 혹은 면접 종료
-  const handleNext = async () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      setIsPlayingAudio(false);
-    }
-
-    if (isRecording) await stopRecording();
-    if (qIdx < questions.length - 1) {
-      resetPostureBaseline(); // Reset posture baseline for the next question
-      setQIdx((prev) => prev + 1);
-      setTranscript("");
-      audioChunksRef.current = [];
-
-      // Start recording for the next question
-      if (streamRef.current) {
-        questionVideoChunksRef.current = []; // Clear chunks for the new question's video
-        const newRecorder = new MediaRecorder(streamRef.current, {
-          mimeType: "video/webm",
-        });
-        newRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) questionVideoChunksRef.current.push(e.data);
-        };
-        newRecorder.start();
-        mediaRecorderRef.current = newRecorder;
-        questionStartTimeRef.current = Date.now(); // Update start time for the new question
-      }
-    } else {
-      endInterview();
-    }
-  };
+const handleNext = async () => {
+  if (isPlayingAudio || isRecording || isPreparing) return;
+  // 오디오 멈춤
+  if (audioRef.current) {
+    audioRef.current.pause();
+    setIsPlayingAudio(false);
+  }
+  // 녹음중이면 마무리
+  if (isRecording) await stopRecording();
+  if (qIdx < questions.length - 1) {
+    setTranscript("");
+    setQIdx((prev) => prev + 1); // 여기서 끝! 아래 불필요 코드 삭제
+  } else {
+    endInterview();
+  }
+};
 
   return (
     <div className="pt-[92px] relative min-h-screen bg-gray-900 text-white">
@@ -839,7 +874,7 @@ export const InterviewSession = () => {
                 variant="outline"
                 className="w-full mt-4"
                 onClick={handleNext}
-                disabled={isLoading || isPlayingAudio}
+                disabled={isLoading || isPlayingAudio || isRecording || isPreparing}
               >
                 {qIdx < questions.length - 1 ? "다음 질문" : "면접 종료"}
               </Button>
