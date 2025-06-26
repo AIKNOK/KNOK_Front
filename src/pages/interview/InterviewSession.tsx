@@ -406,11 +406,15 @@ export const InterviewSession = () => {
 
   // 답변 녹취 및 WebSocket 전송
   const startRecording = async () => {
-    if (isRecording) return;
+    console.log("🟢 startRecording 호출", {
+      questionId: questions[qIdx]?.id,
+      streamReady: !!streamRef.current,
+    });
     if (!questions[qIdx] || !streamRef.current) return;
 
     resetPostureBaseline(); // Reset posture tracking for new question
     setRecordTime(0);
+    setIsRecording(true);
     setIsPreparing(false);
 
     const token = auth.token; // Use auth.token
@@ -424,19 +428,12 @@ export const InterviewSession = () => {
     wsRef.current = ws;
 
     ws.onopen = async () => {
-      console.log("✅ WebSocket 연결됨");
-      ws.send(
-        JSON.stringify({
-          type: "start",
-          sample_rate: 16000,
-          interim: true,
-        })
-      );
-      
-      if (uploadId) {
-        ws.send(JSON.stringify({ type: "upload_id", upload_id: uploadId }));
+      console.log("🟢 WebSocket 연결됨");
+      if (processorRef.current) {
+        processorRef.current.disconnect();
+        processorRef.current = null;
       }
-      setIsRecording(true);
+
       const audioCtx = audioContextRef.current!;
       if (audioCtx.state === "suspended") await audioCtx.resume();
 
@@ -445,10 +442,11 @@ export const InterviewSession = () => {
       processorRef.current = processor;
       processor.onaudioprocess = (e) => {
         const floatData = e.inputBuffer.getChannelData(0);
+        const pcm = convertFloat32ToInt16(floatData);
 
         // ✅ WebSocket이 열려 있는 경우만 send
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(convertFloat32ToInt16(floatData));
+          ws.send(pcm);
         }
 
         audioChunksRef.current.push(new Float32Array(floatData));
@@ -484,28 +482,22 @@ export const InterviewSession = () => {
       }
     };
     ws.onerror = (e) => console.error("WebSocket 오류", e);
-    ws.onclose = (e) => console.log(`WebSocket closed: code=${e.code}, reason=${e.reason}`);
+    ws.onclose = (ev) => console.log("WebSocket 종료", ev);
+
   };
 
   // 녹음 종료 & 업로드 & 꼬리질문
   const stopRecording = async () => {
     console.log("🛑 stopRecording() 실행됨");
     console.log("📝 transcript 내용:", transcript);
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    } 
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setIsRecording(false);
     setIsPreparing(true);
 
     // 비디오 녹화 종료 (개별 질문 클립)
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current = null;
       await new Promise((res) => setTimeout(res, 300));
       const videoBlob = new Blob(questionVideoChunksRef.current, {
         type: "video/webm",
@@ -560,9 +552,13 @@ export const InterviewSession = () => {
 
     // WebSocket 종료
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      if (recordTime > 0) {
       wsRef.current.send(new TextEncoder().encode("END"));
       await new Promise((res) => setTimeout(res, 300));
       wsRef.current.close();
+    } else {
+        console.warn("WebSocket이 열려 있지만 녹음 시간이 0초입니다. 종료하지 않습니다.");
+      }
     }
     processorRef.current?.disconnect();
 
@@ -685,9 +681,7 @@ export const InterviewSession = () => {
       setIsPlayingAudio(false);
     }
 
-    if (isPlayingAudio) return;
-
-    if (isRecording) {await stopRecording(); return;}
+    if (isRecording) await stopRecording();
     if (qIdx < questions.length - 1) {
       resetPostureBaseline(); // Reset posture baseline for the next question
       setQIdx((prev) => prev + 1);
