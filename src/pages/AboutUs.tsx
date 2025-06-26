@@ -35,7 +35,7 @@ const teamMembers = [
     name: "최동욱",
     github: "ddungddangi",
     image: "/동욱.png",   // public/동욱.png
-    message: "print(hello word)",
+    message: "print(hello world)",
   },
 ];
 
