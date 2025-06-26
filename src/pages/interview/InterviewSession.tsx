@@ -137,6 +137,11 @@ export const InterviewSession = () => {
     const token = auth.token; // Use auth.token
     if (!token) return alert("로그인이 필요합니다.");
     setIsLoading(true);
+    const today = new Date();
+    const pad = (n: number | string) => String(n).padStart(2, "0");
+    const upload_id = `${pad(today.getMonth() + 1)}${pad(today.getDate())}-${Math.floor(Date.now() / 1000)}`;
+    uploadIdRef.current = upload_id;
+    setUploadId(upload_id);
     try {
       // 1. 선택한 난이도로 새 질문 생성 요청
       // 백엔드에서 질문 생성 및 TTS 서버 호출까지 처리
@@ -422,9 +427,7 @@ export const InterviewSession = () => {
     const token = auth.token; // Use auth.token
     const ws = new WebSocket(
       `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${auth.userEmail
-      }&question_id=${questions[qIdx].id}&token=${token}${
-        uploadIdRef.current ? `&upload_id=${uploadIdRef.current}` : ""
-      }`
+      }&question_id=${questions[qIdx].id}&token=${token}&upload_id=${uploadIdRef.current}`
     );
 
     ws.binaryType = "arraybuffer";
