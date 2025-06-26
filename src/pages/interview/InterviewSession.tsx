@@ -7,6 +7,7 @@ import {
 } from "../../hooks/usePostureTracking";
 import { encodeWAV } from "../../utils/encodeWAV";
 import { useAuth } from "../../contexts/AuthContext";
+import { a, r } from "node_modules/framer-motion/dist/types.d-CtuPurYT";
 
 interface Question {
   id: string;
@@ -100,7 +101,10 @@ export const InterviewSession = () => {
         if (!AudioCtx) return alert("AudioContext 미지원");
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
-        if (audioCtx.state === "suspended") await audioCtx.resume();
+        if (audioCtx.state === "suspended") {
+          console.log("🔄 오디오 컨텍스트 재시작 중");
+          await audioCtx.resume();
+        }
 
         const source = audioCtx.createMediaStreamSource(stream);
         analyser = audioCtx.createAnalyser();
@@ -160,6 +164,14 @@ export const InterviewSession = () => {
 
       const genResJson = await generateRes.json();
       console.log("새 질문 생성 완료:", genResJson);
+
+      if (genResJson.upload_id) {
+        setUploadId(genResJson.upload_id);
+        console.log("upload_id 저장:", genResJson.upload_id);
+      } else{
+        alert("upload_id가 생성되지 않았습니다. 백엔드 응답을 확인하세요.");
+        return;
+      }   
 
       // 2. TTS 서버가 음성 파일을 생성할 시간 확보
       await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -413,11 +425,13 @@ export const InterviewSession = () => {
     setIsRecording(true);
     setIsPreparing(false);
 
-    const token = auth.token; // Use auth.token
+    const token = auth.token;
+    if (!uploadId) {
+      alert("upload_id가 설정되지 않았습니다. 면접을 다시 시작해주세요.");
+      return;
+    }
     const ws = new WebSocket(
-      `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${
-        auth.userEmail
-      }&question_id=${questions[qIdx].id}&token=${token}`
+      `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${auth.userEmail}&question_id=${questions[qIdx].id}&token=${token}&upload_id=${uploadId}`
     );
 
     ws.binaryType = "arraybuffer";
@@ -457,11 +471,6 @@ export const InterviewSession = () => {
 
     ws.onmessage = (ev) => {
       const data = JSON.parse(ev.data);
-      if (data.type === "upload_id") {
-        setUploadId(data.upload_id);
-        console.log("✅ upload_id 수신:", data.upload_id);
-        return;
-      }
       if (data.transcript) {
         setTranscript((prev) => {
           const updated = prev + data.transcript + "\n";
@@ -572,8 +581,13 @@ export const InterviewSession = () => {
       "transcript",
       new Blob([transcriptRef.current], { type: "text/plain" })
     );
+    
     audioForm.append("email", auth.userEmail || "anonymous");
     audioForm.append("question_id", questions[qIdx].id);
+    if (uploadId) {
+      audioForm.append("upload_id", uploadId); // ✅ WebSocket에서 받은 upload_id를 함께 보냄
+    }
+
     await fetch(`${API_BASE}/audio/upload/`, {
       method: "POST",
       headers: {
