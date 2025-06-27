@@ -117,7 +117,7 @@ const FeedbackReport: React.FC = () => {
 
     const formData = new FormData();
     formData.append('pdf', blob, 'feedback_report.pdf');
-    formData.append('upload_id', upload_id);
+    formData.append('video_id', upload_id);
 
     if (!token) {
       throw new Error('인증 토큰이 없습니다.');
