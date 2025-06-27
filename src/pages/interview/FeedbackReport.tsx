@@ -116,7 +116,7 @@ const FeedbackReport: React.FC = () => {
     const blob = await generatePDFBlob();
 
     const formData = new FormData();
-    formData.append('file', blob, 'feedback_report.pdf');
+    formData.append('pdf', blob, 'feedback_report.pdf');
     formData.append('videoId', upload_id);
 
     if (!token) {
