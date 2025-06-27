@@ -232,6 +232,7 @@ export const InterviewSession = () => {
       interview_id: videoId,
       existing_question_numbers: questions.map((q) => q.id),
     };
+    console.log('[꼬리질문 요청]', payload);
     const res = await fetch(`${API_BASE}/followup/check/`, {
       method: "POST",
       headers: {
@@ -240,8 +241,10 @@ export const InterviewSession = () => {
       },
       body: JSON.stringify(payload),
     });
+    console.log('[꼬리질문 응답]', res.status, res.statusText);
     if (!res.ok) return false;
     const data = await res.json();
+    console.log('[꼬리질문 데이터]', data);
     if (data.followup && data.question && data.question_number) {
       setQuestions((prev) => {
         const updated = [
