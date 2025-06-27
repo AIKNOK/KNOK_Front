@@ -498,6 +498,7 @@ export const InterviewSession = () => {
 
   // 면접 종료
   const endInterview = async () => {
+    setIsLoading(true);
     const token = auth.token; // Use auth.token
     if (!token) return;
 
@@ -512,6 +513,8 @@ export const InterviewSession = () => {
     // This part should still be done to analyze voice data after last question
     if (uploadId && countsRef.current) {
       try {
+        console.log("분석 요청 전 uploadId:", uploadId);
+        console.log("분석 요청 전 posture_count:", countsRef.current);
         const analyzePayload = {
           upload_id: uploadId,
           posture_count: countsRef.current,
@@ -543,6 +546,8 @@ export const InterviewSession = () => {
         });
       } catch (e) {
         console.error("최종 분석 실패:", e);
+        console.error("실패 당시 uploadId:", uploadId);
+        console.error("실패 당시 posture_count:", countsRef.current);
         alert("최종 분석 실패");
       }
     } else {
