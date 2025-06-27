@@ -323,6 +323,14 @@ export const InterviewSession = () => {
 
   // 녹음 및 WebSocket 시작
   const startRecording = async () => {
+    if (processorRef.current) {
+      processorRef.current.onaudioprocess = null;
+      try{
+      processorRef.current.disconnect(); } catch (e) {}
+      processorRef.current = null;
+    }
+    audioChunksRef.current = [];
+
     if (!questions[qIdx] || !streamRef.current) return;
 
     resetPostureBaseline(); // Reset posture tracking for new question
@@ -390,9 +398,19 @@ export const InterviewSession = () => {
     };
     ws.onerror = (e) => {
       console.error("WebSocket 오류", e);
+      if (processorRef.current) {
+        processorRef.current.onaudioprocess = null;
+        try { processorRef.current.disconnect(); } catch (e) {}
+        processorRef.current = null;
+      } 
     };
     ws.onclose = (event) => {
       console.log("WebSocket 종료", event.code, event.reason);
+      if (processorRef.current) {
+        processorRef.current.onaudioprocess = null;
+        try { processorRef.current.disconnect(); } catch (e) {}
+        processorRef.current = null;
+      }
     };
   };
 
@@ -458,7 +476,11 @@ export const InterviewSession = () => {
       await new Promise((res) => setTimeout(res, 300));
       wsRef.current.close();
     }
-    processorRef.current?.disconnect();
+    if (processorRef.current) {
+      processorRef.current.onaudioprocess = null;
+      try { processorRef.current.disconnect(); } catch (e) {}
+      processorRef.current = null;
+    }
 
     // 오디오 업로드
     const token = auth.token;
