@@ -65,6 +65,7 @@ const FeedbackReport: React.FC = () => {
     email_prefix?: string;
     feedbackText: string;
   };
+  console.log("[FeedbackReport] 전달받은 state:", location.state);
   const [isDownloading, setIsDownloading] = useState(false);
 
   // 피드백 prsighned URL 제공
@@ -208,9 +209,11 @@ const FeedbackReport: React.FC = () => {
             body: JSON.stringify({ analysis, email_prefix, upload_id }),
           }
         );
+        console.log("[FeedbackReport] generate 호출 body:", { analysis, email_prefix, upload_id });
         if (!fRes.ok) throw new Error(`서버 에러 ${fRes.status}`);
         const data = await fRes.json();
         console.log("❗️ generate_feedback_report 응답:", data);
+        console.log("[FeedbackReport] 서버에서 받은 피드백:", data);
         setFeedback(data);
 
         // 자세 문제에 따른 피드백 생성 함수 추가
