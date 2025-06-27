@@ -117,7 +117,7 @@ const FeedbackReport: React.FC = () => {
 
     const formData = new FormData();
     formData.append('pdf', blob, 'feedback_report.pdf');
-    formData.append('video_id', upload_id);
+    formData.append('video_Id', upload_id);
 
     if (!token) {
       throw new Error('인증 토큰이 없습니다.');
@@ -424,40 +424,31 @@ const FeedbackReport: React.FC = () => {
         <section className="mt-8">
           <h2 className="text-xl font-semibold mb-4">추출된 클립</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {clips.map((c, i) => {
-              // 썸네일 URL 콘솔 확인 (디버깅용)
-              console.log("썸네일 URL", c.thumbnailUrl);
-              return (
-                <div key={i} className="border rounded-lg p-4">
-                  <img
-                    src={c.thumbnailUrl}
-                    alt={`Clip ${i + 1}`}
-                    className="w-full h-auto mb-2 rounded-md"
-                    onError={e => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = "/no_thumbnail.png";
-                    }}
-                  />
-                  <a
-                    href={c.clipUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 underline"
-                  >
-                    클립 {i + 1} 보기
-                  </a>
-                  {c.feedback && (
-                    <p className="mt-2 text-sm text-gray-600">{c.feedback}</p>
-                  )}
-                </div>
-              );
-            })}
+            {clips.map((c, i) => (
+              <div key={i} className="border rounded-lg p-4">
+                <img
+                  src={c.thumbnailUrl}
+                  alt={`Clip ${i + 1}`}
+                  className="w-full h-auto mb-2 rounded-md"
+                />
+                <a
+                  href={c.clipUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 underline"
+                >
+                  클립 {i + 1} 보기
+                </a>
+                {c.feedback && (
+                  <p className="mt-2 text-sm text-gray-600">{c.feedback}</p>
+                )}
+              </div>
+            ))}
           </div>
         </section>
       )}
     </div>
   );
 };
-
 
 export default FeedbackReport;

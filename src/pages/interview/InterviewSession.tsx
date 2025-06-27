@@ -266,6 +266,7 @@ export const InterviewSession = () => {
   // 질문 인덱스 변경시 오디오 재생
   useEffect(() => {
     if (isInterviewActive && questions[qIdx]) {
+       setRecordTime(0);
       playQuestionAudio();
     }
     // eslint-disable-next-line
@@ -329,6 +330,9 @@ export const InterviewSession = () => {
     setIsRecording(true);
     setIsPreparing(false);
 
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
     const token = auth.token; // Use auth.token
     const ws = new WebSocket(
       `${import.meta.env.VITE_WEBSOCKET_BASE_URL}/ws/transcribe?email=${
@@ -362,6 +366,7 @@ export const InterviewSession = () => {
 
       timeoutRef.current = window.setTimeout(async () => {
         clearInterval(recordTimerRef.current!);
+        setRecordTime(0);
         await stopRecording();
         handleNext();
       }, MAX_ANSWER_DURATION * 1000);
@@ -395,6 +400,7 @@ export const InterviewSession = () => {
   const stopRecording = async () => {
     if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setRecordTime(0);
     setIsRecording(false);
     setIsPreparing(true);
 
@@ -499,6 +505,10 @@ export const InterviewSession = () => {
   // 면접 종료
   const endInterview = async () => {
     setIsLoading(true);
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setRecordTime(0);
+
     const token = auth.token; // Use auth.token
     if (!token) return;
 
@@ -579,6 +589,9 @@ export const InterviewSession = () => {
       audioRef.current.pause();
       setIsPlayingAudio(false);
     }
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setRecordTime(0);
 
     if (isRecording) await stopRecording();
     if (qIdx < questions.length - 1) {
