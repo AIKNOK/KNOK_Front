@@ -396,108 +396,121 @@ export const InterviewSession = () => {
 
   // 녹음 종료, 업로드, 꼬리질문 판단
   const stopRecording = async () => {
-    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setIsRecording(false);
-    setIsPreparing(true);
+  if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+  if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  setIsRecording(false);
+  setIsPreparing(true);
 
-    // 비디오 클립 업로드
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      await new Promise((res) => setTimeout(res, 300));
-      const videoBlob = new Blob(questionVideoChunksRef.current, {
-        type: "video/webm",
-      });
-      const videoFile = new File([videoBlob], "clip.webm", {
-        type: "video/webm",
-      });
-      const clipForm = new FormData();
-      clipForm.append("video", videoFile);
-      clipForm.append("interview_id", videoId);
-      clipForm.append("question_id", questions[qIdx].id);
-      const token = auth.token;
-      await fetch(`${API_BASE}/video/upload-question-clip/`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: clipForm,
-      }).catch(console.error);
-    }
-
-    // 자세 클립 분할
-    const duration = recordTime;
-    const relSegments = segmentsRef.current
-      .filter((s) => s.start < duration && s.end > 0)
-      .map((s) => ({
-        start: Math.max(0, s.start),
-        end: Math.min(duration, s.end),
-      }));
-    if (relSegments.length > 0) {
-      const segmentPayload = {
-        interview_id: videoId,
-        question_id: questions[qIdx].id,
-        segments: relSegments,
-        feedbacks: relSegments.map(() => ""),
-      };
-      const token = auth.token;
-      await fetch(`${API_BASE}/video/extract-question-clip-segments/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(segmentPayload),
-      });
-    }
-
-    // WebSocket 종료
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(new TextEncoder().encode("END"));
-      await new Promise((res) => setTimeout(res, 300));
-      wsRef.current.close();
-    }
-    processorRef.current?.disconnect();
-
-    // 오디오 업로드
+  // 비디오 클립 업로드
+  if (mediaRecorderRef.current) {
+    mediaRecorderRef.current.stop();
+    await new Promise((res) => setTimeout(res, 300));
+    const videoBlob = new Blob(questionVideoChunksRef.current, {
+      type: "video/webm",
+    });
+    const videoFile = new File([videoBlob], "clip.webm", {
+      type: "video/webm",
+    });
+    const clipForm = new FormData();
+    clipForm.append("video", videoFile);
+    clipForm.append("interview_id", videoId);
+    clipForm.append("question_id", questions[qIdx].id);
     const token = auth.token;
-    const wavBlob = encodeWAV(
-      audioChunksRef.current.reduce((acc, cur) => {
-        const tmp = new Float32Array(acc.length + cur.length);
-        tmp.set(acc);
-        tmp.set(cur, acc.length);
-        return tmp;
-      }, new Float32Array()),
-      16000
-    );
-    const audioForm = new FormData();
-    audioForm.append(
-      "audio",
-      new File([wavBlob], "answer.wav", { type: "audio/wav" })
-    );
-    audioForm.append(
-      "transcript",
-      new Blob([transcriptRef.current], { type: "text/plain" })
-    );
-    
-    audioForm.append("email", auth.userEmail || "anonymous");
-    audioForm.append("question_id", questions[qIdx].id);
-    if (uploadId) {
-      audioForm.append("upload_id", uploadId); // ✅ WebSocket에서 받은 upload_id를 함께 보냄
-    }
-
-    await fetch(`${API_BASE}/audio/upload/`, {
+    await fetch(`${API_BASE}/video/upload-question-clip/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
-      body: audioForm,
+      body: clipForm,
     }).catch(console.error);
+  }
 
-    // 꼬리질문
-    if (transcriptRef.current.trim()) {
-      await decideFollowup(transcriptRef.current, qIdx);
-    }
-    setIsPreparing(false);
-    audioChunksRef.current = [];
-    questionVideoChunksRef.current = [];
-  };
+  // 자세 클립 분할
+  const duration = recordTime;
+  const relSegments = segmentsRef.current
+    .filter((s) => s.start < duration && s.end > 0)
+    .map((s) => ({
+      start: Math.max(0, s.start),
+      end: Math.min(duration, s.end),
+    }));
+  if (relSegments.length > 0) {
+    const segmentPayload = {
+      interview_id: videoId,
+      question_id: questions[qIdx].id,
+      segments: relSegments,
+      feedbacks: relSegments.map(() => ""),
+    };
+    const token = auth.token;
+    await fetch(`${API_BASE}/video/extract-question-clip-segments/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(segmentPayload),
+    });
+  }
+
+  // WebSocket 종료
+  if (wsRef.current?.readyState === WebSocket.OPEN) {
+    wsRef.current.send(new TextEncoder().encode("END"));
+    await new Promise((res) => setTimeout(res, 300));
+    wsRef.current.close();
+  }
+  processorRef.current?.disconnect();
+
+  // 오디오 업로드
+  const token = auth.token;
+  const wavBlob = encodeWAV(
+    audioChunksRef.current.reduce((acc, cur) => {
+      const tmp = new Float32Array(acc.length + cur.length);
+      tmp.set(acc);
+      tmp.set(cur, acc.length);
+      return tmp;
+    }, new Float32Array()),
+    16000
+  );
+  const audioForm = new FormData();
+  audioForm.append(
+    "audio",
+    new File([wavBlob], "answer.wav", { type: "audio/wav" })
+  );
+  audioForm.append(
+    "transcript",
+    new Blob([transcriptRef.current], { type: "text/plain" })
+  );
+  audioForm.append("email", auth.userEmail || "anonymous");
+  audioForm.append("question_id", questions[qIdx].id);
+  if (uploadId) {
+    audioForm.append("upload_id", uploadId);
+  }
+
+  await fetch(`${API_BASE}/audio/upload/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: audioForm,
+  }).catch(console.error);
+
+  // ✅ 꼬리질문 판단 조건 강화
+  const refinedTranscript = transcriptRef.current.trim();
+  console.log("📌 꼬리질문 판단용 transcript:", refinedTranscript);
+
+  if (
+    refinedTranscript &&
+    refinedTranscript.toLowerCase() !== "blob" &&
+    refinedTranscript.length > 5
+  ) {
+    console.log("✅ 꼬리질문 판단 조건 만족, API 호출 진행");
+    await decideFollowup(refinedTranscript, qIdx);
+  } else {
+    console.warn(
+      "⚠️ transcript가 무의미하거나 너무 짧아 꼬리질문 생략됨:",
+      refinedTranscript
+    );
+  }
+
+  setIsPreparing(false);
+  audioChunksRef.current = [];
+  questionVideoChunksRef.current = [];
+};
 
   // 면접 종료
   const endInterview = async () => {
