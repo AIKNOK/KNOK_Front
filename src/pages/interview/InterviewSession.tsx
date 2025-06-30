@@ -371,8 +371,21 @@ export const InterviewSession = () => {
     };
 
     ws.onmessage = (ev) => {
+      console.log("📥 message frame type:", ev.data instanceof ArrayBuffer ? "ArrayBuffer" : typeof ev.data);
+
+      let raw: string;
+      if (ev.data instanceof ArrayBuffer) {
+        raw = new TextDecoder().decode(ev.data);
+      } else {
+        raw = ev.data as string;
+      }
+
+      console.log("📑 WS raw payload:", raw);
+
       try {
-        const data = JSON.parse(ev.data);
+        const data = JSON.parse(raw);
+        console.log("✅ JSON 파싱 성공:", data);
+        
         if (data.type === "upload_id") {
           setUploadId(data.upload_id);
           return;
@@ -385,16 +398,15 @@ export const InterviewSession = () => {
             return updated;
           });
         }
-      } catch {}
+      } catch (err) {
+        console.error("❌ JSON 파싱 에러:", err, "원본 데이터:", raw);
+      }
     };
     ws.onerror = (e) => {
       console.error("WebSocket 오류", e);
     };
     ws.onclose = (event) => {
       console.log("WebSocket 종료", event.code, event.reason);
-    };
-    ws.onmessage = (e) => {
-      console.error("STT 파싱 오류:", e);
     };
   };
 
