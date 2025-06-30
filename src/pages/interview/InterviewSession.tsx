@@ -378,6 +378,7 @@ export const InterviewSession = () => {
           return;
         }
         if (data.transcript) {
+          console.log("🔊 STT 수신:", data.transcript);
           setTranscript((prev) => {
             const updated = prev + data.transcript + "\n";
             transcriptRef.current = updated;
@@ -391,6 +392,9 @@ export const InterviewSession = () => {
     };
     ws.onclose = (event) => {
       console.log("WebSocket 종료", event.code, event.reason);
+    };
+    ws.onmessage = (e) => {
+      console.error("STT 파싱 오류:", e);
     };
   };
 
