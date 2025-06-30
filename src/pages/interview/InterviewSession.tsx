@@ -455,7 +455,15 @@ export const InterviewSession = () => {
     await new Promise((res) => setTimeout(res, 300));
     wsRef.current.close();
   }
-  processorRef.current?.disconnect();
+
+  if (processorRef.current) {
+    processorRef.current.disconnect();
+    processorRef.current.onaudioprocess = null;
+  }
+
+  if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+    await audioContextRef.current.suspend();
+  }
 
   // 오디오 업로드
   const token = auth.token;
@@ -576,7 +584,8 @@ export const InterviewSession = () => {
         },
       });
     }
-
+    
+    setUploadId(null);
     setQuestions([]);
     setQIdx(0);
     setIsInterviewActive(false);
