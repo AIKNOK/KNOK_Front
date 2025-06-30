@@ -371,10 +371,21 @@ export const InterviewSession = () => {
     };
 
     ws.onmessage = (ev) => {
-      console.log("📩 WebSocket 메시지 수신:", ev.data);
+      console.log("📥 message frame type:", ev.data instanceof ArrayBuffer ? "ArrayBuffer" : typeof ev.data);
+
+      let raw: string;
+      if (ev.data instanceof ArrayBuffer) {
+        raw = new TextDecoder().decode(ev.data);
+      } else {
+        raw = ev.data as string;
+      }
+
+      console.log("📑 WS raw payload:", raw);
+
       try {
-        const data = JSON.parse(ev.data);
-        console.log("📩 파싱된 데이터:", data);
+        const data = JSON.parse(raw);
+        console.log("✅ JSON 파싱 성공:", data);
+       
         if (data.type === "upload_id") {
           setUploadId(data.upload_id);
           return;
