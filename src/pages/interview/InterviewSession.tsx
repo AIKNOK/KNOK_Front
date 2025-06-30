@@ -223,7 +223,7 @@ export const InterviewSession = () => {
     const token = auth.token;
     if (!token || !resumeRef.current) return false;
     const payload = {
-      resume_text: resumeRef.current,
+      resume_text: resumeText,
       user_answer: userAnswer.trim(),
       base_question_number: parseInt(
         questions[questionIndex].id.match(/\d+/)?.[0] || "0",
@@ -385,21 +385,22 @@ export const InterviewSession = () => {
       try {
         const data = JSON.parse(raw);
         console.log("✅ JSON 파싱 성공:", data);
-        
+       
         if (data.type === "upload_id") {
           setUploadId(data.upload_id);
           return;
         }
         if (data.transcript) {
-          console.log("🔊 STT 수신:", data.transcript);
+          console.log("📝 STT 텍스트 수신:", data.transcript);
           setTranscript((prev) => {
             const updated = prev + data.transcript + "\n";
             transcriptRef.current = updated;
             return updated;
           });
         }
-      } catch (err) {
-        console.error("❌ JSON 파싱 에러:", err, "원본 데이터:", raw);
+      } catch (err){
+        console.error("WebSocket 메시지 파싱 오류:", err);
+        console.error("❌ 문제 데이터:", ev.data);
       }
     };
     ws.onerror = (e) => {
