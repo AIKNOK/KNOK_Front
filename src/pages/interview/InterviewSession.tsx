@@ -258,7 +258,7 @@ export const InterviewSession = () => {
           },
           ...prev.slice(questionIndex + 1),
         ];
-        setQIdx(questionIndex + 1);
+        setTimeout(() => setQIdx(questionIndex + 1), 0);
         return updated;
       });
       return true;
