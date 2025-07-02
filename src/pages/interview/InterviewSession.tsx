@@ -258,6 +258,7 @@ export const InterviewSession = () => {
           },
           ...prev.slice(questionIndex + 1),
         ];
+        console.log("꼬리질문 추가 후 updated 배열:", updated);
         setTimeout(() => setQIdx(questionIndex + 1), 0);
         return updated;
       });
