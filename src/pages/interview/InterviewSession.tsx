@@ -101,7 +101,6 @@ export const InterviewSession = () => {
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
         if (audioCtx.state === "suspended") {
-          console.log("🔄 오디오 컨텍스트 재시작 중");
           await audioCtx.resume();
         }
 
@@ -215,7 +214,7 @@ export const InterviewSession = () => {
     }
   };
 
-  // 꼬리질문 판단
+  // 🔥 꼬리질문 → TTS 생성 → S3 대기 → 전체 질문 새로고침 → 인덱스 이동까지!
   const decideFollowup = async (
     userAnswer: string,
     questionIndex: number
@@ -232,7 +231,7 @@ export const InterviewSession = () => {
       interview_id: videoId,
       existing_question_numbers: questions.map((q) => q.id),
     };
-    console.log('[꼬리질문 요청]', payload);
+    // 1. 꼬리질문 판별
     const res = await fetch(`${API_BASE}/followup/check/`, {
       method: "POST",
       headers: {
@@ -241,27 +240,43 @@ export const InterviewSession = () => {
       },
       body: JSON.stringify(payload),
     });
-    console.log('[꼬리질문 응답]', res.status, res.statusText);
     if (!res.ok) return false;
     const data = await res.json();
-    console.log('[꼬리질문 데이터]', data);
     if (data.followup && data.question && data.question_number) {
-      setQuestions((prev) => {
-        const updated = [
-          ...prev.slice(0, questionIndex + 1),
-          {
-            id: data.question_number,
-            text: data.question,
-            type: "behavioral",
-            difficulty: "medium",
-            audio_url: data.audio_url,
-          },
-          ...prev.slice(questionIndex + 1),
-        ];
-        console.log("꼬리질문 추가 후 updated 배열:", updated);
-        setTimeout(() => setQIdx(questionIndex + 1), 0);
-        return updated;
+      // 2. 꼬리질문 텍스트 TTS 생성
+      await fetch(`${API_BASE}/generate-followup-question/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: data.question,
+          question_number: data.question_number,
+        }),
       });
+      // 3. S3 반영 대기
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      // 4. 전체 질문 다시 받아오기
+      const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!qRes.ok) throw new Error("질문 갱신 실패");
+      const { questions: questionMap } = await qRes.json();
+
+      const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
+      const updatedQuestions = Object.entries(questionMap).map(([id, text]) => ({
+        id,
+        text,
+        type: "behavioral",
+        difficulty: "medium",
+        audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
+      })) as Question[];
+
+      // 꼬리질문 인덱스로 이동
+      const idx = updatedQuestions.findIndex((q) => q.id === data.question_number);
+      setQuestions(updatedQuestions);
+      setQIdx(idx !== -1 ? idx : updatedQuestions.length - 1);
       return true;
     }
     return false;
