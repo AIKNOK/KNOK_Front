@@ -17,6 +17,7 @@ interface Question {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const WS_BASE = API_BASE.replace("http", "ws"); // Convert http(s) to ws(s) for WebSocket URL
 const MAX_ANSWER_DURATION = 90;
 const S3_BASE_URL = "https://knok-tts.s3.ap-northeast-2.amazonaws.com/";
 
@@ -133,6 +134,75 @@ export const InterviewSession = () => {
     };
   }, [navigate]);
 
+  // WebSocket 연결 및 메시지 수신
+  useEffect(() => {
+    if (!auth.userEmail) return;
+
+    const userEmail = auth.userEmail;
+    const wsUrl = `${WS_BASE}/ws/questions?user_email=${userEmail}`;
+
+    wsRef.current = new WebSocket(wsUrl);
+
+    wsRef.current.onopen = () => {
+      console.log("✅ WebSocket connected to question server");
+    };
+
+    wsRef.current.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "new_question") {
+        console.log("🆕 New question received via WebSocket:", data);
+        const newQuestion: Question = {
+          id: data.question_number,
+          text: data.question,
+          type: "behavioral", // Or determine type based on backend data
+          difficulty: "medium", // Or determine difficulty based on backend data
+          audio_url: `${S3_BASE_URL}${userEmail.split('@')[0]}/${data.question_number}.wav`, // Construct audio URL if needed
+        };
+        setQuestions((prev) => {
+          const updated = [...prev];
+          // Find the correct position to insert the new question
+          // This logic assumes questions are ordered by number.
+          let inserted = false;
+          for (let i = 0; i < updated.length; i++) {
+            const currentQNum = parseInt(updated[i].id.split('-')[0]);
+            const newQNum = parseInt(newQuestion.id.split('-')[0]);
+            if (newQNum < currentQNum) {
+              updated.splice(i, 0, newQuestion);
+              inserted = true;
+              break;
+            } else if (newQNum === currentQNum) {
+              const currentSubQNum = parseInt(updated[i].id.split('-')[1] || '0');
+              const newSubQNum = parseInt(newQuestion.id.split('-')[1] || '0');
+              if (newSubQNum < currentSubQNum) {
+                updated.splice(i, 0, newQuestion);
+                inserted = true;
+                break;
+              }
+            }
+          }
+          if (!inserted) {
+            updated.push(newQuestion);
+          }
+          return updated;
+        });
+      }
+    };
+
+    wsRef.current.onclose = () => {
+      console.log("❌ WebSocket disconnected from question server");
+    };
+
+    wsRef.current.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [auth.userEmail]);
+
   // 면접 시작 핸들러
   const onStart = async () => {
     const token = auth.token;
@@ -158,36 +228,26 @@ export const InterviewSession = () => {
           }`
         );
       }
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!qRes.ok) throw new Error(qRes.statusText || String(qRes.status));
-      const { questions: questionMap } = await qRes.json();
+      // Frontend no longer needs to fetch all questions here as they will be pushed via WebSocket
+      // await new Promise((resolve) => setTimeout(resolve, 3000));
+      // const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
+      //   headers: { Authorization: `Bearer ${token}` },
+      // });
+      // if (!qRes.ok) throw new Error(qRes.statusText || String(qRes.status));
+      // const { questions: questionMap } = await qRes.json();
 
-      const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
-      const filteredQuestionList = (
-        Object.entries(questionMap) as [string, string][]
-      ).map(([id, text]) => ({
-        id,
-        text,
-        type: "behavioral",
-        difficulty: "medium",
-        audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
-      }));
+      // const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
+      // const filteredQuestionList = (
+      //   Object.entries(questionMap) as [string, string][]
+      // ).map(([id, text]) => ({
+      //   id,
+      //   text,
+      //   type: "behavioral",
+      //   difficulty: "medium",
+      //   audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
+      // }));
 
-      // 자기소개 질문 맨 앞으로
-      const sortedQuestionList = [...filteredQuestionList].sort((a, b) => {
-        if (a.text.includes("자기소개")) return -1;
-        if (b.text.includes("자기소개")) return 1;
-        const getNumericId = (id: string) => {
-          const match = id.match(/\d+/);
-          return match ? parseInt(match[0]) : Number.MAX_SAFE_INTEGER;
-        };
-        return getNumericId(a.id) - getNumericId(b.id);
-      });
-
-      setQuestions(sortedQuestionList);
+      // setQuestions(sortedQuestionList); // Initial questions will be pushed via WS
 
       // 이력서 텍스트 가져오기
       try {
@@ -245,26 +305,15 @@ export const InterviewSession = () => {
     if (!res.ok) return false;
     const data = await res.json();
     console.log('[꼬리질문 데이터]', data);
-    if (data.followup && data.question && data.question_number) {
-      setQuestions((prev) => {
-        const updated = [
-          ...prev.slice(0, questionIndex + 1),
-          {
-            id: data.question_number,
-            text: data.question,
-            type: "behavioral",
-            difficulty: "medium",
-            audio_url: data.audio_url,
-          },
-          ...prev.slice(questionIndex + 1),
-        ];
-        console.log("꼬리질문 추가 후 updated 배열:", updated);
-        setTimeout(() => setQIdx(questionIndex + 1), 0);
-        return updated;
-      });
-      return true;
-    }
-    return false;
+    // No longer updating questions here directly, as it will be pushed via WebSocket
+    // if (data.followup && data.question && data.question_number) {
+    //   setQuestions((prev) => {
+    //     const updated = [
+    // ...
+    //     return updated;
+    //   });
+    // }
+    return data.followup; // Still return whether a followup was decided
   };
 
   // 질문 인덱스 변경시 오디오 재생
@@ -397,121 +446,155 @@ export const InterviewSession = () => {
 
   // 녹음 종료, 업로드, 꼬리질문 판단
   const stopRecording = async () => {
-  if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-  if (timeoutRef.current) clearTimeout(timeoutRef.current);
-  setIsRecording(false);
-  setIsPreparing(true);
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setIsRecording(false); // Immediate UI update
+    setIsPreparing(true);
 
-  // 비디오 클립 업로드
-  if (mediaRecorderRef.current) {
-    mediaRecorderRef.current.stop();
-    await new Promise((res) => setTimeout(res, 300));
-    const videoBlob = new Blob(questionVideoChunksRef.current, {
-      type: "video/webm",
-    });
-    const videoFile = new File([videoBlob], "clip.webm", {
-      type: "video/webm",
-    });
-    const clipForm = new FormData();
-    clipForm.append("video", videoFile);
-    clipForm.append("interview_id", videoId);
-    clipForm.append("question_id", questions[qIdx].id);
-    const token = auth.token;
-    await fetch(`${API_BASE}/video/upload-question-clip/`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: clipForm,
-    }).catch(console.error);
-  }
+    // Immediate stopping actions
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      // No await here, let the 'stop' event handle data collection
+    }
 
-  // 자세 클립 분할
-  const duration = recordTime;
-  const relSegments = segmentsRef.current
-    .filter((s) => s.start < duration && s.end > 0)
-    .map((s) => ({
-      start: Math.max(0, s.start),
-      end: Math.min(duration, s.end),
-    }));
-  if (relSegments.length > 0) {
-    const segmentPayload = {
-      interview_id: videoId,
-      question_id: questions[qIdx].id,
-      segments: relSegments,
-      feedbacks: relSegments.map(() => ""),
-    };
-    const token = auth.token;
-    await fetch(`${API_BASE}/video/extract-question-clip-segments/`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(segmentPayload),
-    });
-  }
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(new TextEncoder().encode("END")); // Signal end to transcription
+      wsRef.current.close(); // Immediately close WebSocket
+    }
+    processorRef.current?.disconnect(); // Disconnect audio processor immediately
 
-  // WebSocket 종료
-  if (wsRef.current?.readyState === WebSocket.OPEN) {
-    wsRef.current.send(new TextEncoder().encode("END"));
-    await new Promise((res) => setTimeout(res, 300));
-    wsRef.current.close();
-  }
-  processorRef.current?.disconnect();
+    // Collect current audio chunks and transcript before clearing
+    const currentAudioChunks = audioChunksRef.current;
+    const currentTranscript = transcriptRef.current;
+    const currentVideoChunks = questionVideoChunksRef.current;
+    const currentRecordTime = recordTime;
+    const currentSegments = segmentsRef.current;
+    
+    // Clear refs for next recording
+    audioChunksRef.current = [];
+    transcriptRef.current = "";
+    questionVideoChunksRef.current = [];
+    segmentsRef.current = [];
 
-  // 오디오 업로드
-  const token = auth.token;
-  const wavBlob = encodeWAV(
-    audioChunksRef.current.reduce((acc, cur) => {
-      const tmp = new Float32Array(acc.length + cur.length);
-      tmp.set(acc);
-      tmp.set(cur, acc.length);
-      return tmp;
-    }, new Float32Array()),
-    16000
-  );
-  const audioForm = new FormData();
-  audioForm.append(
-    "audio",
-    new File([wavBlob], "answer.wav", { type: "audio/wav" })
-  );
-  audioForm.append(
-    "transcript",
-    new Blob([transcriptRef.current], { type: "text/plain" })
-  );
-  audioForm.append("email", auth.userEmail || "anonymous");
-  audioForm.append("question_id", questions[qIdx].id);
-  if (uploadId) {
-    audioForm.append("upload_id", uploadId);
-  }
-
-  await fetch(`${API_BASE}/audio/upload/`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: audioForm,
-  }).catch(console.error);
-
-  // ✅ 꼬리질문 판단 조건 강화
-  const refinedTranscript = transcriptRef.current.trim();
-  console.log("📌 꼬리질문 판단용 transcript:", refinedTranscript);
-
-  if (
-    refinedTranscript &&
-    refinedTranscript.toLowerCase() !== "blob" &&
-    refinedTranscript.length > 5
-  ) {
-    console.log("✅ 꼬리질문 판단 조건 만족, API 호출 진행");
-    await decideFollowup(refinedTranscript, qIdx);
-  } else {
-    console.warn(
-      "⚠️ transcript가 무의미하거나 너무 짧아 꼬리질문 생략됨:",
-      refinedTranscript
+    // Asynchronous processing and upload
+    // This will now run in the background, without blocking handleNext immediately.
+    await processRecordingData(
+      currentAudioChunks,
+      currentTranscript,
+      currentVideoChunks,
+      currentRecordTime,
+      currentSegments,
+      uploadId,
+      auth.userEmail || "anonymous",
+      questions[qIdx].id,
+      videoId,
+      auth.token || ""
     );
-  }
+  };
 
-  setIsPreparing(false);
-  audioChunksRef.current = [];
-  questionVideoChunksRef.current = [];
-};
+  const processRecordingData = async (
+    audioChunks: Float32Array[],
+    transcript: string,
+    videoChunks: Blob[],
+    duration: number,
+    segments: { start: number; end: number }[],
+    currentUploadId: string | null,
+    userEmail: string,
+    questionId: string,
+    interviewId: string,
+    token: string
+  ) => {
+    console.log("🚀 Processing recording data...");
+    try {
+      // Video clip upload
+      if (videoChunks.length > 0) {
+        const videoBlob = new Blob(videoChunks, { type: "video/webm" });
+        const videoFile = new File([videoBlob], "clip.webm", { type: "video/webm" });
+        const clipForm = new FormData();
+        clipForm.append("video", videoFile);
+        clipForm.append("interview_id", interviewId);
+        clipForm.append("question_id", questionId);
+        await fetch(`${API_BASE}/video/upload-question-clip/`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: clipForm,
+        }).catch(console.error);
+      }
+
+      // Posture clip segmentation
+      const relSegments = segments
+        .filter((s) => s.start < duration && s.end > 0)
+        .map((s) => ({
+          start: Math.max(0, s.start),
+          end: Math.min(duration, s.end),
+        }));
+      if (relSegments.length > 0) {
+        const segmentPayload = {
+          interview_id: interviewId,
+          question_id: questionId,
+          segments: relSegments,
+          feedbacks: relSegments.map(() => ""),
+        };
+        await fetch(`${API_BASE}/video/extract-question-clip-segments/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(segmentPayload),
+        });
+      }
+
+      // Audio upload
+      const wavBlob = encodeWAV(
+        audioChunks.reduce((acc, cur) => {
+          const tmp = new Float32Array(acc.length + cur.length);
+          tmp.set(acc);
+          tmp.set(cur, acc.length);
+          return tmp;
+        }, new Float32Array()),
+        16000
+      );
+      const audioForm = new FormData();
+      audioForm.append("audio", new File([wavBlob], "answer.wav", { type: "audio/wav" }));
+      audioForm.append("transcript", new Blob([transcript], { type: "text/plain" }));
+      audioForm.append("email", userEmail);
+      audioForm.append("question_id", questionId);
+      if (currentUploadId) {
+        audioForm.append("upload_id", currentUploadId);
+      }
+      await fetch(`${API_BASE}/audio/upload/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: audioForm,
+      }).catch(console.error);
+
+      // Decide followup (moved here to ensure processing is done before potentially calling it)
+      const refinedTranscript = transcript.trim();
+      console.log("📌 꼬리질문 판단용 transcript:", refinedTranscript);
+
+      if (
+        refinedTranscript &&
+        refinedTranscript.toLowerCase() !== "blob" &&
+        refinedTranscript.length > 5
+      ) {
+        const shouldFollowup = await decideFollowup(
+          refinedTranscript,
+          qIdx
+        );
+        if (shouldFollowup) {
+          console.log("Waiting for followup question via WebSocket after processing data...");
+          // Do not advance qIdx immediately, wait for WS to push
+          return; 
+        }
+      }
+      handleNext(); // Call handleNext only after processing is complete
+
+    } catch (error) {
+      console.error("❌ Error processing recording data:", error);
+      handleNext(); // Ensure we still move on even if processing fails
+    }
+  };
 
   // 면접 종료
   const endInterview = async () => {
