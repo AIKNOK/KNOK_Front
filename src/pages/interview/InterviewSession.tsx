@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/shared/Button";
 import {
@@ -40,6 +40,17 @@ export const InterviewSession = () => {
   const questionStartTimeRef = useRef<number>(0);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
+  // 오디오 관리 상태
+  const audioPlaybackRef = useRef<{
+    currentAudio: HTMLAudioElement | null;
+    isPlaying: boolean;
+    playPromise: Promise<void> | null;
+  }>({
+    currentAudio: null,
+    isPlaying: false,
+    playPromise: null,
+  });
+
   const auth = useAuth();
   const videoIdRef = useRef(
     `interview_${auth.userEmail || "anonymous"}_${Date.now()}`
@@ -62,12 +73,177 @@ export const InterviewSession = () => {
     "중간"
   );
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [userInteracted, setUserInteracted] = useState(false);
 
   const { countsRef, segmentsRef } = usePostureTracking(
     videoRef,
     videoId,
     questionStartTimeRef.current
   );
+
+  // 오디오 정지 함수
+  const stopCurrentAudio = useCallback(async () => {
+    const { currentAudio, playPromise } = audioPlaybackRef.current;
+    
+    if (playPromise) {
+      try {
+        await playPromise;
+      } catch (error) {
+        // 이미 중단된 경우 무시
+      }
+    }
+    
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      currentAudio.removeEventListener('ended', handleAudioEnded);
+      currentAudio.removeEventListener('error', handleAudioError);
+    }
+    
+    audioPlaybackRef.current = {
+      currentAudio: null,
+      isPlaying: false,
+      playPromise: null,
+    };
+    
+    setIsPlayingAudio(false);
+    setAudioError(null);
+  }, []);
+
+  // 오디오 종료 핸들러
+  const handleAudioEnded = useCallback(() => {
+    setIsPlayingAudio(false);
+    audioPlaybackRef.current.isPlaying = false;
+    audioPlaybackRef.current.currentAudio = null;
+    audioPlaybackRef.current.playPromise = null;
+    
+    // 오디오 재생 완료 후 자동으로 녹음 시작
+    if (isInterviewActive && !isRecording) {
+      // startRecording을 비동기로 호출
+      setTimeout(() => {
+        startRecording();
+      }, 100);
+    }
+  }, [isInterviewActive, isRecording]);
+
+  // 오디오 에러 핸들러
+  const handleAudioError = useCallback((event: Event) => {
+    const audio = event.target as HTMLAudioElement;
+    const error = audio.error;
+    
+    let errorMessage = "오디오 재생 중 오류가 발생했습니다.";
+    if (error) {
+      switch (error.code) {
+        case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+          errorMessage = "오디오 파일을 찾을 수 없습니다.";
+          break;
+        case error.MEDIA_ERR_NETWORK:
+          errorMessage = "네트워크 오류로 오디오를 로드할 수 없습니다.";
+          break;
+        case error.MEDIA_ERR_DECODE:
+          errorMessage = "오디오 파일이 손상되었습니다.";
+          break;
+        case error.MEDIA_ERR_ABORTED:
+          errorMessage = "오디오 재생이 중단되었습니다.";
+          break;
+      }
+    }
+    
+    console.error("🎵 오디오 재생 오류:", errorMessage, error);
+    setAudioError(errorMessage);
+    setIsPlayingAudio(false);
+    audioPlaybackRef.current.isPlaying = false;
+  }, []);
+
+  // 안전한 오디오 재생 함수
+  const playAudioSafely = useCallback(async (audioUrl: string): Promise<boolean> => {
+    if (!userInteracted) {
+      setAudioError("브라우저 정책상 사용자 상호작용 후 오디오를 재생할 수 있습니다.");
+      return false;
+    }
+
+    try {
+      // 기존 오디오 정지
+      await stopCurrentAudio();
+      
+      // 새 오디오 생성
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.crossOrigin = 'anonymous';
+      
+      // 이벤트 리스너 등록
+      audio.addEventListener('ended', handleAudioEnded);
+      audio.addEventListener('error', handleAudioError);
+      
+      // 오디오 상태 업데이트
+      audioPlaybackRef.current.currentAudio = audio;
+      setIsPlayingAudio(true);
+      setAudioError(null);
+      
+      // 오디오 로드 및 재생
+      audio.src = audioUrl;
+      
+      const playPromise = audio.play();
+      audioPlaybackRef.current.playPromise = playPromise;
+      audioPlaybackRef.current.isPlaying = true;
+      
+      await playPromise;
+      
+      console.log("🎵 오디오 재생 시작:", audioUrl);
+      return true;
+      
+    } catch (error) {
+      console.error("🎵 오디오 재생 실패:", error);
+      
+      let errorMessage = "오디오 재생에 실패했습니다.";
+      if (error instanceof DOMException) {
+        switch (error.name) {
+          case 'NotAllowedError':
+            errorMessage = "브라우저에서 오디오 자동재생이 차단되었습니다. 다시 시도해주세요.";
+            break;
+          case 'NotSupportedError':
+            errorMessage = "지원되지 않는 오디오 형식입니다.";
+            break;
+          case 'AbortError':
+            errorMessage = "오디오 재생이 중단되었습니다.";
+            break;
+        }
+      }
+      
+      setAudioError(errorMessage);
+      setIsPlayingAudio(false);
+      audioPlaybackRef.current.isPlaying = false;
+      return false;
+    }
+  }, [userInteracted, stopCurrentAudio, handleAudioEnded, handleAudioError]);
+
+  // 사용자 상호작용 감지
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      setUserInteracted(true);
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+    };
+
+    document.addEventListener('click', handleUserInteraction);
+    document.addEventListener('keydown', handleUserInteraction);
+    document.addEventListener('touchstart', handleUserInteraction);
+
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+    };
+  }, []);
+
+  // 컴포넌트 언마운트 시 오디오 정리
+  useEffect(() => {
+    return () => {
+      stopCurrentAudio();
+    };
+  }, [stopCurrentAudio]);
 
   // Float32 PCM → Int16 PCM 변환
   const convertFloat32ToInt16 = (buffer: Float32Array): Uint8Array => {
@@ -139,6 +315,9 @@ export const InterviewSession = () => {
   const onStart = async () => {
     const token = auth.token;
     if (!token) return alert("로그인이 필요합니다.");
+    
+    // 사용자 상호작용 등록
+    setUserInteracted(true);
     setIsLoading(true);
     try {
       // 질문 및 TTS 음성 생성 요청
@@ -191,6 +370,24 @@ export const InterviewSession = () => {
 
       setQuestions(sortedQuestionList);
 
+      // 면접 활성화
+      setIsInterviewActive(true);
+      
+      // 첫 번째 질문 오디오 재생
+      if (sortedQuestionList.length > 0 && sortedQuestionList[0].audio_url) {
+        setTimeout(async () => {
+          const success = await playAudioSafely(sortedQuestionList[0].audio_url!);
+          if (!success) {
+            // 오디오 재생 실패 시 자동으로 녹음 시작
+            setTimeout(() => {
+              if (isInterviewActive && !isRecording) {
+                startRecording();
+              }
+            }, 1000);
+          }
+        }, 1000); // 면접 시작 후 약간의 지연
+      }
+
       // 이력서 텍스트 가져오기
       try {
         const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
@@ -206,7 +403,6 @@ export const InterviewSession = () => {
       }
 
       setQIdx(0);
-      setIsInterviewActive(true);
       interviewStartRef.current = Date.now();
       questionStartTimeRef.current = Date.now();
     } catch (err) {
@@ -250,34 +446,7 @@ export const InterviewSession = () => {
     return data.followup_generated; // Return whether a followup was generated
   };
 
-  // 질문 변경 시 오디오 재생 및 녹음 시작
-  useEffect(() => {
-    if (isInterviewActive && questions.length > 0 && qIdx < questions.length) {
-      const currentQuestion = questions[qIdx];
-      if (currentQuestion.audio_url) {
-        setIsPlayingAudio(true);
-        console.log(`🎵 Attempting to play audio for question ${currentQuestion.id} from: ${currentQuestion.audio_url}`); // Added log
-        audioRef.current!.src = currentQuestion.audio_url;
-        audioRef.current!.onended = () => {
-          setIsPlayingAudio(false);
-          startRecording();
-        };
-        audioRef.current!.onerror = (e) => {
-          console.error("Audio playback error:", e);
-          setIsPlayingAudio(false);
-          startRecording(); // Proceed even if audio fails
-        };
-        audioRef.current!.play().catch((e) => {
-          console.error("Audio play promise rejected:", e);
-          setIsPlayingAudio(false);
-          startRecording(); // Proceed even if play fails
-        });
-      } else {
-        // If no audio_url, start recording immediately (e.g., first question before TTS is ready)
-        startRecording();
-      }
-    }
-  }, [qIdx, questions, isInterviewActive]);
+  // 이 로직은 이제 handleNext와 onStart에서 직접 처리됩니다
 
   // 녹음 및 WebSocket 시작
   const startRecording = async () => {
@@ -630,33 +799,58 @@ export const InterviewSession = () => {
 
   // 다음 질문 혹은 면접 종료
   const handleNext = async () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      setIsPlayingAudio(false);
-    }
+    try {
+      // 사용자 상호작용 등록
+      setUserInteracted(true);
+      
+      // 현재 오디오 정지
+      await stopCurrentAudio();
 
-    if (isRecording) await stopRecording();
-    if (qIdx < questions.length - 1) {
-      resetPostureBaseline(); // Reset posture baseline for the next question
-      setQIdx((prev) => prev + 1);
-      setTranscript("");
-      audioChunksRef.current = [];
+      if (isRecording) await stopRecording();
+      
+      if (qIdx < questions.length - 1) {
+        resetPostureBaseline(); // Reset posture baseline for the next question
+        setQIdx((prev) => prev + 1);
+        setTranscript("");
+        audioChunksRef.current = [];
 
-      // Start recording for the next question
-      if (streamRef.current) {
-        questionVideoChunksRef.current = []; // Clear chunks for the new question's video
-        const newRecorder = new MediaRecorder(streamRef.current, {
-          mimeType: "video/webm",
-        });
-        newRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) questionVideoChunksRef.current.push(e.data);
-        };
-        newRecorder.start();
-        mediaRecorderRef.current = newRecorder;
-        questionStartTimeRef.current = Date.now(); // Update start time for the new question
+        // Start recording for the next question
+        if (streamRef.current) {
+          questionVideoChunksRef.current = []; // Clear chunks for the new question's video
+          const newRecorder = new MediaRecorder(streamRef.current, {
+            mimeType: "video/webm",
+          });
+          newRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) questionVideoChunksRef.current.push(e.data);
+          };
+          newRecorder.start();
+          mediaRecorderRef.current = newRecorder;
+          questionStartTimeRef.current = Date.now(); // Update start time for the new question
+        }
+
+        // 다음 질문 오디오 재생
+        const nextQuestion = questions[qIdx + 1];
+        if (nextQuestion?.audio_url) {
+          setTimeout(async () => {
+            const success = await playAudioSafely(nextQuestion.audio_url!);
+            if (!success) {
+              // 오디오 재생 실패 시 자동으로 녹음 시작
+              if (isInterviewActive && !isRecording) {
+                startRecording();
+              }
+            }
+          }, 500); // 질문 변경 후 약간의 지연
+        } else {
+          // 오디오 URL이 없는 경우 즉시 녹음 시작
+          if (isInterviewActive && !isRecording) {
+            startRecording();
+          }
+        }
+      } else {
+        endInterview();
       }
-    } else {
-      endInterview();
+    } catch (error) {
+      console.error("질문 전환 중 오류:", error);
     }
   };
 
@@ -762,6 +956,8 @@ export const InterviewSession = () => {
                 </span>
               </div>
               <p className="text-gray-300">{questions[qIdx]?.text}</p>
+              
+              {/* 오디오 상태 표시 */}
               {isPlayingAudio && (
                 <div className="mt-2 flex items-center text-sm text-blue-400">
                   <svg
@@ -776,6 +972,49 @@ export const InterviewSession = () => {
                     />
                   </svg>
                   질문 음성 재생 중...
+                </div>
+              )}
+              
+              {/* 오디오 에러 표시 */}
+              {audioError && (
+                <div className="mt-2 p-3 bg-red-900/50 border border-red-500 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <svg className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <div className="flex-1">
+                      <p className="text-sm text-red-300 font-medium">오디오 재생 오류</p>
+                      <p className="text-xs text-red-400 mt-1">{audioError}</p>
+                      {questions[qIdx]?.audio_url && (
+                        <button
+                          onClick={async () => {
+                            setUserInteracted(true);
+                            await playAudioSafely(questions[qIdx].audio_url!);
+                          }}
+                          className="mt-2 text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition"
+                        >
+                          다시 재생
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* 사용자 상호작용 필요 알림 */}
+              {!userInteracted && isInterviewActive && (
+                <div className="mt-2 p-3 bg-yellow-900/50 border border-yellow-500 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <svg className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <div className="flex-1">
+                      <p className="text-sm text-yellow-300 font-medium">브라우저 자동재생 제한</p>
+                      <p className="text-xs text-yellow-400 mt-1">
+                        오디오 재생을 위해 아무 버튼이나 클릭해주세요.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
               {isRecording && (
