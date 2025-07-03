@@ -189,6 +189,7 @@ export const InterviewSession = () => {
       const { questions: questionMap } = await qRes.json();
 
       const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
+      
       const filteredQuestionList = (
         Object.entries(questionMap) as [string, string][]
       ).map(([id, text]) => ({
@@ -196,7 +197,7 @@ export const InterviewSession = () => {
         text,
         type: "behavioral",
         difficulty: "medium",
-        audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
+        audio_url: `${S3_BASE_URL}${email}/questions${id}.wav`,
       }));
 
       // 자기소개 질문 맨 앞으로
@@ -286,7 +287,7 @@ export const InterviewSession = () => {
       // 실패해도 텍스트만 먼저 추가하도록 지나감
     }
 
-    if (data.followup_generated && data.question && data.question_number) {
+    if (data.followup && data.question && data.question_number) {
       setQuestions((prev) => {
         const updated = [
           ...prev.slice(0, questionIndex + 1),
