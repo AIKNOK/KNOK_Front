@@ -77,6 +77,28 @@ export const InterviewSession = () => {
     return new Uint8Array(result.buffer);
   };
 
+  useEffect(() => {
+    if (isInterviewActive && isRecording && !isPreparing && questions[qIdx]) {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+      recordTimerRef.current = window.setInterval(() => {
+        setRecordTime((prev) => Math.min(prev + 1, MAX_ANSWER_DURATION));
+      }, 1000);
+
+      timeoutRef.current = window.setTimeout(async () => {
+        clearInterval(recordTimerRef.current!);
+        await stopRecording();
+        handleNext();
+      }, MAX_ANSWER_DURATION * 1000);
+    }
+
+    return () => {
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [isInterviewActive, isRecording, isPreparing, qIdx, questions]);
+
   // 초기 카메라/마이크 셋업
   useEffect(() => {
     setRecordTime(0);
@@ -359,16 +381,6 @@ export const InterviewSession = () => {
       };
       source.connect(processor);
       processor.connect(audioCtx.destination);
-
-      recordTimerRef.current = window.setInterval(() => {
-        setRecordTime((prev) => Math.min(prev + 1, MAX_ANSWER_DURATION));
-      }, 1000);
-
-      timeoutRef.current = window.setTimeout(async () => {
-        clearInterval(recordTimerRef.current!);
-        await stopRecording();
-        handleNext();
-      }, MAX_ANSWER_DURATION * 1000);
     };
 
     ws.onmessage = (ev) => {
