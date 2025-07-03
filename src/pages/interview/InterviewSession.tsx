@@ -7,6 +7,7 @@ import {
 } from "../../hooks/usePostureTracking";
 import { encodeWAV } from "../../utils/encodeWAV";
 import { useAuth } from "../../contexts/AuthContext";
+import { s } from "node_modules/framer-motion/dist/types.d-CtuPurYT";
 
 interface Question {
   id: string;
@@ -59,7 +60,7 @@ export const InterviewSession = () => {
   const [difficulty, setDifficulty] = useState<"쉬움" | "중간" | "어려움">(
     "중간"
   );
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(false);
 
   const { countsRef, segmentsRef } = usePostureTracking(
     videoRef,
@@ -67,6 +68,7 @@ export const InterviewSession = () => {
     questionStartTimeRef.current
   );
 
+  // Float32 PCM → Int16 PCM 변환
   const convertFloat32ToInt16 = (buffer: Float32Array): Uint8Array => {
     const result = new Int16Array(buffer.length);
     for (let i = 0; i < buffer.length; i++) {
@@ -76,6 +78,7 @@ export const InterviewSession = () => {
     return new Uint8Array(result.buffer);
   };
 
+  // 초기 카메라/마이크 셋업
   useEffect(() => {
     setRecordTime(0);
     let analyser: AnalyserNode;
@@ -117,6 +120,7 @@ export const InterviewSession = () => {
         };
         draw();
       } catch (err) {
+        console.error("getUserMedia error:", err);
         navigate("/interview/check-environment");
       }
     };
@@ -129,11 +133,13 @@ export const InterviewSession = () => {
     };
   }, [navigate]);
 
+  // 면접 시작 핸들러
   const onStart = async () => {
     const token = auth.token;
     if (!token) return alert("로그인이 필요합니다.");
     setIsLoading(true);
     try {
+      // 질문 및 TTS 음성 생성 요청
       const generateRes = await fetch(
         `${API_BASE}/generate-resume-questions/`,
         {
@@ -145,37 +151,71 @@ export const InterviewSession = () => {
           body: JSON.stringify({ difficulty }),
         }
       );
-      if (!generateRes.ok) throw new Error("질문 생성 실패");
-
+      if (!generateRes.ok) {
+        throw new Error(
+          `질문 생성 실패: ${
+            generateRes.statusText || String(generateRes.status)
+          }`
+        );
+      }
       await new Promise((resolve) => setTimeout(resolve, 3000));
-
       const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!qRes.ok) throw new Error("질문 가져오기 실패");
+      if (!qRes.ok) throw new Error(qRes.statusText || String(qRes.status));
       const { questions: questionMap } = await qRes.json();
 
       const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
-      const questionList = (Object.entries(questionMap) as [string, string][]).map(
-        ([id, text]) => ({
-          id,
-          text,
-          type: "behavioral",
-          difficulty: "medium",
-          audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
-        })
-      );
+      const filteredQuestionList = (
+        Object.entries(questionMap) as [string, string][]
+      ).map(([id, text]) => ({
+        id,
+        text,
+        type: "behavioral",
+        difficulty: "medium",
+        audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
+      }));
 
-      setQuestions(questionList);
+      // 자기소개 질문 맨 앞으로
+      const sortedQuestionList = [...filteredQuestionList].sort((a, b) => {
+        if (a.text.includes("자기소개")) return -1;
+        if (b.text.includes("자기소개")) return 1;
+        const getNumericId = (id: string) => {
+          const match = id.match(/\d+/);
+          return match ? parseInt(match[0]) : Number.MAX_SAFE_INTEGER;
+        };
+        return getNumericId(a.id) - getNumericId(b.id);
+      });
+
+      setQuestions(sortedQuestionList);
+
+      // 이력서 텍스트 가져오기
+      try {
+        const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (rRes.ok) {
+          const { resume_text } = await rRes.json();
+          setResumeText(resume_text || "");
+          resumeRef.current = resume_text || "";
+        }
+      } catch (resumeError) {
+        console.error("이력서 텍스트 가져오기 실패:", resumeError);
+      }
+
       setQIdx(0);
       setIsInterviewActive(true);
+      interviewStartRef.current = Date.now();
+      questionStartTimeRef.current = Date.now();
     } catch (err) {
-      alert("면접 시작 오류");
+      console.error("면접 시작 실패:", err);
+      alert("면접 시작 중 오류가 발생했습니다.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // 꼬리질문 판단 (S3에서 질문 새로고침 방식)
   const decideFollowup = async (
     userAnswer: string,
     questionIndex: number
@@ -193,6 +233,7 @@ export const InterviewSession = () => {
       interview_id: videoId,
       existing_question_numbers: questions.map((q) => q.id),
     };
+    console.log('[꼬리질문 요청]', payload);
 
     const res = await fetch(`${API_BASE}/followup/check/`, {
       method: "POST",
@@ -203,61 +244,62 @@ export const InterviewSession = () => {
       body: JSON.stringify(payload),
     });
 
+    console.log('[꼬리질문 응답]', res.status, res.statusText);
     if (!res.ok) return false;
+
     const data = await res.json();
+    console.log('[꼬리질문 데이터]', data);
 
-    if (data.message && data.message.includes("SQS")) {
-      await new Promise((resolve) => setTimeout(resolve, 4000));
-
+    if (data.followup) {
+      // ✅ 꼬리질문이 생성되면 질문 목록 전체를 새로 불러와 최신화
+      console.log("✅ 꼬리질문이 생성됨. get_all_questions 재호출 중...");
       const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!qRes.ok) return false;
-      const { questions: questionMap } = await qRes.json();
-
-      const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
-      const allQuestions = (Object.entries(questionMap) as [string, string][]).map(
-        ([id, text]) => ({
-          id,
-          text,
-          type: "behavioral",
-          difficulty: "medium",
-          audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
-        })
-      );
-
-      const existingIds = new Set(questions.map((q) => q.id));
-      const newQuestion = allQuestions.find((q) => !existingIds.has(q.id));
-      if (newQuestion) {
-        setQuestions((prev) => [
-          ...prev.slice(0, questionIndex + 1),
-          newQuestion,
-          ...prev.slice(questionIndex + 1),
-        ]);
-        setQIdx(questionIndex + 1);
-        return true;
+      if (!qRes.ok) {
+        console.error("get_all_questions 재호출 실패", qRes.statusText);
+        return true; // 그래도 followup은 생성된 상태
       }
-      return false;
-    }
+      const { questions: questionMap } = await qRes.json();
+      const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
+      const updatedQuestions = (
+        Object.entries(questionMap) as [string, string][]
+      ).map(([id, text]) => ({
+        id,
+        text,
+        type: "behavioral",
+        difficulty: "medium",
+        audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
+      }));
 
-    if (data.followup && data.question && data.question_number) {
-      setQuestions((prev) => [
-        ...prev.slice(0, questionIndex + 1),
-        {
-          id: data.question_number,
-          text: data.question,
-          type: "behavioral",
-          difficulty: "medium",
-          audio_url: data.audio_url,
-        },
-        ...prev.slice(questionIndex + 1),
-      ]);
-      setQIdx(questionIndex + 1);
+      // 자기소개 질문 맨 앞으로
+      const sortedUpdatedQuestions = [...updatedQuestions].sort((a, b) => {
+        if (a.text.includes("자기소개")) return -1;
+        if (b.text.includes("자기소개")) return 1;
+        const getNumericId = (id: string) => {
+          const match = id.match(/\d+/);
+          return match ? parseInt(match[0]) : Number.MAX_SAFE_INTEGER;
+        };
+        return getNumericId(a.id) - getNumericId(b.id);
+      });
+
+      setQuestions(sortedUpdatedQuestions);
+
+      // 새로 생성된 꼬리질문 인덱스로 자동 이동
+      const followupIdx = sortedUpdatedQuestions.findIndex(
+        (q) => q.id === data.question_number
+      );
+      if (followupIdx >= 0) {
+        console.log(`✅ 꼬리질문 index: ${followupIdx}`);
+        setTimeout(() => setQIdx(followupIdx), 0);
+      }
+
       return true;
     }
 
     return false;
   };
+
 
   // 질문 인덱스 변경시 오디오 재생
   useEffect(() => {
@@ -268,7 +310,7 @@ export const InterviewSession = () => {
   }, [isInterviewActive, qIdx, questions]);
 
   // 질문 오디오 재생
-  const playQuestionAudio = async () => {
+  const playQuestionAudio = async (retryCount = 0) => {
     if (!questions[qIdx]) return;
     try {
       setIsPlayingAudio(true);
@@ -280,8 +322,17 @@ export const InterviewSession = () => {
       if (audioUrl) {
         try {
           const response = await fetch(audioUrl);
-          if (!response.ok)
-            throw new Error(`오디오 fetch 실패: ${response.status}`);
+          if (!response.ok){
+            if (retryCount < 6) {
+              if (retryCount === 0)
+                setIsPlayingAudio("pending");
+              setTimeout(() => playQuestionAudio(retryCount + 1), 3000);
+            } else {
+              setIsPlayingAudio(false);
+              startRecording();
+            }
+            return;
+          }
           const blob = await response.blob();
           const blobUrl = URL.createObjectURL(blob);
           if (!audioRef.current) {
@@ -741,7 +792,7 @@ export const InterviewSession = () => {
                 variant="outline"
                 className="w-full mt-4"
                 onClick={handleNext}
-                disabled={isLoading || isPlayingAudio}
+                disabled={isLoading || isPlayingAudio === true || isPlayingAudio === "pending"}
               >
                 {qIdx < questions.length - 1 ? "다음 질문" : "면접 종료"}
               </Button>
