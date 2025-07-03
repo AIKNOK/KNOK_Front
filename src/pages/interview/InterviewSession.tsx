@@ -7,7 +7,6 @@ import {
 } from "../../hooks/usePostureTracking";
 import { encodeWAV } from "../../utils/encodeWAV";
 import { useAuth } from "../../contexts/AuthContext";
-import { s } from "node_modules/framer-motion/dist/types.d-CtuPurYT";
 
 interface Question {
   id: string;
@@ -18,6 +17,7 @@ interface Question {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
+// const WS_BASE = API_BASE.replace("http", "ws"); // Convert http(s) to ws(s) for WebSocket URL
 const MAX_ANSWER_DURATION = 90;
 const S3_BASE_URL = "https://knok-tts.s3.ap-northeast-2.amazonaws.com/";
 
@@ -38,6 +38,7 @@ export const InterviewSession = () => {
   const transcriptRef = useRef<string>("");
   const interviewStartRef = useRef<number>(0);
   const questionStartTimeRef = useRef<number>(0);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
   const auth = useAuth();
   const videoIdRef = useRef(
@@ -60,7 +61,7 @@ export const InterviewSession = () => {
   const [difficulty, setDifficulty] = useState<"쉬움" | "중간" | "어려움">(
     "중간"
   );
-const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   const { countsRef, segmentsRef } = usePostureTracking(
     videoRef,
@@ -102,6 +103,7 @@ const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(f
         const audioCtx = new AudioCtx({ sampleRate: 16000 });
         audioContextRef.current = audioCtx;
         if (audioCtx.state === "suspended") {
+          console.log("🔄 오디오 컨텍스트 재시작 중");
           await audioCtx.resume();
         }
 
@@ -158,7 +160,7 @@ const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(f
           }`
         );
       }
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Frontend now fetches all questions after generation, no longer relies on WebSocket push for initial set
       const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -215,14 +217,13 @@ const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(f
     }
   };
 
-  // 꼬리질문 판단 (S3에서 질문 새로고침 방식)
+  // 꼬리질문 판단
   const decideFollowup = async (
     userAnswer: string,
     questionIndex: number
   ): Promise<boolean> => {
     const token = auth.token;
     if (!token || !resumeRef.current) return false;
-
     const payload = {
       resume_text: resumeRef.current,
       user_answer: userAnswer.trim(),
@@ -234,8 +235,7 @@ const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(f
       existing_question_numbers: questions.map((q) => q.id),
     };
     console.log('[꼬리질문 요청]', payload);
-
-    const res = await fetch(`${API_BASE}/followup/check/`, {
+    const res = await fetch(`${API_BASE}/decide_followup_question/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -243,129 +243,41 @@ const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(f
       },
       body: JSON.stringify(payload),
     });
-
     console.log('[꼬리질문 응답]', res.status, res.statusText);
     if (!res.ok) return false;
-
     const data = await res.json();
     console.log('[꼬리질문 데이터]', data);
-
-    if (data.followup) {
-      // ✅ 꼬리질문이 생성되면 질문 목록 전체를 새로 불러와 최신화
-      console.log("✅ 꼬리질문이 생성됨. get_all_questions 재호출 중...");
-      const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!qRes.ok) {
-        console.error("get_all_questions 재호출 실패", qRes.statusText);
-        return true; // 그래도 followup은 생성된 상태
-      }
-      const { questions: questionMap } = await qRes.json();
-      const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
-      const updatedQuestions = (
-        Object.entries(questionMap) as [string, string][]
-      ).map(([id, text]) => ({
-        id,
-        text,
-        type: "behavioral",
-        difficulty: "medium",
-        audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
-      }));
-
-      // 자기소개 질문 맨 앞으로
-      const sortedUpdatedQuestions = [...updatedQuestions].sort((a, b) => {
-        if (a.text.includes("자기소개")) return -1;
-        if (b.text.includes("자기소개")) return 1;
-        const getNumericId = (id: string) => {
-          const match = id.match(/\d+/);
-          return match ? parseInt(match[0]) : Number.MAX_SAFE_INTEGER;
-        };
-        return getNumericId(a.id) - getNumericId(b.id);
-      });
-
-      setQuestions(sortedUpdatedQuestions);
-
-      // 새로 생성된 꼬리질문 인덱스로 자동 이동
-      const followupIdx = sortedUpdatedQuestions.findIndex(
-        (q) => q.id === data.question_number
-      );
-      if (followupIdx >= 0) {
-        console.log(`✅ 꼬리질문 index: ${followupIdx}`);
-        setTimeout(() => setQIdx(followupIdx), 0);
-      }
-
-      return true;
-    }
-
-    return false;
+    return data.followup_generated; // Return whether a followup was generated
   };
 
-
-  // 질문 인덱스 변경시 오디오 재생
+  // 질문 변경 시 오디오 재생 및 녹음 시작
   useEffect(() => {
-    if (isInterviewActive && questions[qIdx]) {
-      playQuestionAudio();
-    }
-    // eslint-disable-next-line
-  }, [isInterviewActive, qIdx, questions]);
-
-  // 질문 오디오 재생
-  const playQuestionAudio = async (retryCount = 0) => {
-    if (!questions[qIdx]) return;
-    try {
-      setIsPlayingAudio(true);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-      const audioUrl = questions[qIdx].audio_url;
-      if (audioUrl) {
-        try {
-          const response = await fetch(audioUrl);
-          if (!response.ok){
-            if (retryCount < 6) {
-              if (retryCount === 0)
-                setIsPlayingAudio("pending");
-              setTimeout(() => playQuestionAudio(retryCount + 1), 3000);
-            } else {
-              setIsPlayingAudio(false);
-              startRecording();
-            }
-            return;
-          }
-          const blob = await response.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          if (!audioRef.current) {
-            const audioElement = document.createElement("audio");
-            audioElement.hidden = true;
-            document.body.appendChild(audioElement);
-            audioRef.current = audioElement;
-          }
-          audioRef.current.src = blobUrl;
-          audioRef.current.onended = () => {
-            setIsPlayingAudio(false);
-            startRecording();
-            URL.revokeObjectURL(blobUrl);
-          };
-          audioRef.current.onerror = (e) => {
-            setIsPlayingAudio(false);
-            startRecording();
-            URL.revokeObjectURL(blobUrl);
-          };
-          await audioRef.current.play();
-        } catch (fetchError) {
+    if (isInterviewActive && questions.length > 0 && qIdx < questions.length) {
+      const currentQuestion = questions[qIdx];
+      if (currentQuestion.audio_url) {
+        setIsPlayingAudio(true);
+        console.log(`🎵 Attempting to play audio for question ${currentQuestion.id} from: ${currentQuestion.audio_url}`); // Added log
+        audioRef.current!.src = currentQuestion.audio_url;
+        audioRef.current!.onended = () => {
           setIsPlayingAudio(false);
           startRecording();
-        }
+        };
+        audioRef.current!.onerror = (e) => {
+          console.error("Audio playback error:", e);
+          setIsPlayingAudio(false);
+          startRecording(); // Proceed even if audio fails
+        };
+        audioRef.current!.play().catch((e) => {
+          console.error("Audio play promise rejected:", e);
+          setIsPlayingAudio(false);
+          startRecording(); // Proceed even if play fails
+        });
       } else {
-        setIsPlayingAudio(false);
+        // If no audio_url, start recording immediately (e.g., first question before TTS is ready)
         startRecording();
       }
-    } catch (error) {
-      setIsPlayingAudio(false);
-      startRecording();
     }
-  };
+  }, [qIdx, questions, isInterviewActive]);
 
   // 녹음 및 WebSocket 시작
   const startRecording = async () => {
@@ -391,6 +303,7 @@ const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(f
       if (audioCtx.state === "suspended") await audioCtx.resume();
 
       const source = audioCtx.createMediaStreamSource(streamRef.current!);
+      sourceRef.current = source; // Store source reference
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
       processor.onaudioprocess = (e) => {
@@ -410,7 +323,7 @@ const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(f
       timeoutRef.current = window.setTimeout(async () => {
         clearInterval(recordTimerRef.current!);
         await stopRecording();
-        handleNext();
+        // Removed handleNext here, it will be called from processRecordingData
       }, MAX_ANSWER_DURATION * 1000);
     };
 
@@ -440,121 +353,203 @@ const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(f
 
   // 녹음 종료, 업로드, 꼬리질문 판단
   const stopRecording = async () => {
-  if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-  if (timeoutRef.current) clearTimeout(timeoutRef.current);
-  setIsRecording(false);
-  setIsPreparing(true);
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setIsRecording(false); // Immediate UI update
+    setIsPreparing(true);
 
-  // 비디오 클립 업로드
-  if (mediaRecorderRef.current) {
-    mediaRecorderRef.current.stop();
-    await new Promise((res) => setTimeout(res, 300));
-    const videoBlob = new Blob(questionVideoChunksRef.current, {
-      type: "video/webm",
-    });
-    const videoFile = new File([videoBlob], "clip.webm", {
-      type: "video/webm",
-    });
-    const clipForm = new FormData();
-    clipForm.append("video", videoFile);
-    clipForm.append("interview_id", videoId);
-    clipForm.append("question_id", questions[qIdx].id);
-    const token = auth.token;
-    await fetch(`${API_BASE}/video/upload-question-clip/`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: clipForm,
-    }).catch(console.error);
-  }
+    // Immediate stopping actions
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      // No await here, let the 'stop' event handle data collection
+    }
 
-  // 자세 클립 분할
-  const duration = recordTime;
-  const relSegments = segmentsRef.current
-    .filter((s) => s.start < duration && s.end > 0)
-    .map((s) => ({
-      start: Math.max(0, s.start),
-      end: Math.min(duration, s.end),
-    }));
-  if (relSegments.length > 0) {
-    const segmentPayload = {
-      interview_id: videoId,
-      question_id: questions[qIdx].id,
-      segments: relSegments,
-      feedbacks: relSegments.map(() => ""),
-    };
-    const token = auth.token;
-    await fetch(`${API_BASE}/video/extract-question-clip-segments/`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(segmentPayload),
-    });
-  }
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(new TextEncoder().encode("END")); // Signal end to transcription
+      wsRef.current.close(); // Immediately close WebSocket
+    }
+    
+    // Properly disconnect audio nodes
+    if (sourceRef.current && processorRef.current) {
+      sourceRef.current.disconnect(processorRef.current);
+      processorRef.current.disconnect();
+      sourceRef.current = null;
+      processorRef.current = null;
+    }
 
-  // WebSocket 종료
-  if (wsRef.current?.readyState === WebSocket.OPEN) {
-    wsRef.current.send(new TextEncoder().encode("END"));
-    await new Promise((res) => setTimeout(res, 300));
-    wsRef.current.close();
-  }
-  processorRef.current?.disconnect();
+    // Collect current audio chunks and transcript before clearing
+    const currentAudioChunks = audioChunksRef.current;
+    const currentTranscript = transcriptRef.current;
+    const currentVideoChunks = questionVideoChunksRef.current;
+    const currentRecordTime = recordTime;
+    const currentSegments = segmentsRef.current;
 
-  // 오디오 업로드
-  const token = auth.token;
-  const wavBlob = encodeWAV(
-    audioChunksRef.current.reduce((acc, cur) => {
-      const tmp = new Float32Array(acc.length + cur.length);
-      tmp.set(acc);
-      tmp.set(cur, acc.length);
-      return tmp;
-    }, new Float32Array()),
-    16000
-  );
-  const audioForm = new FormData();
-  audioForm.append(
-    "audio",
-    new File([wavBlob], "answer.wav", { type: "audio/wav" })
-  );
-  audioForm.append(
-    "transcript",
-    new Blob([transcriptRef.current], { type: "text/plain" })
-  );
-  audioForm.append("email", auth.userEmail || "anonymous");
-  audioForm.append("question_id", questions[qIdx].id);
-  if (uploadId) {
-    audioForm.append("upload_id", uploadId);
-  }
+    // Clear refs for next recording
+    audioChunksRef.current = [];
+    transcriptRef.current = "";
+    questionVideoChunksRef.current = [];
+    segmentsRef.current = [];
 
-  await fetch(`${API_BASE}/audio/upload/`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: audioForm,
-  }).catch(console.error);
-
-  // ✅ 꼬리질문 판단 조건 강화
-  const refinedTranscript = transcriptRef.current.trim();
-  console.log("📌 꼬리질문 판단용 transcript:", refinedTranscript);
-
-  if (
-    refinedTranscript &&
-    refinedTranscript.toLowerCase() !== "blob" &&
-    refinedTranscript.length > 5
-  ) {
-    console.log("✅ 꼬리질문 판단 조건 만족, API 호출 진행");
-    await decideFollowup(refinedTranscript, qIdx);
-  } else {
-    console.warn(
-      "⚠️ transcript가 무의미하거나 너무 짧아 꼬리질문 생략됨:",
-      refinedTranscript
+    // Asynchronous processing and upload
+    // This will now run in the background, without blocking handleNext immediately.
+    await processRecordingData(
+      currentAudioChunks,
+      currentTranscript,
+      currentVideoChunks,
+      currentRecordTime,
+      currentSegments,
+      uploadId,
+      auth.userEmail!,
+      questions[qIdx].id,
+      videoId,
+      auth.token!
     );
-  }
+  };
 
-  setIsPreparing(false);
-  audioChunksRef.current = [];
-  questionVideoChunksRef.current = [];
-};
+  const processRecordingData = async (
+    audioChunks: Float32Array[],
+    transcript: string,
+    videoChunks: Blob[],
+    duration: number,
+    segments: { start: number; end: number }[],
+    currentUploadId: string | null,
+    userEmail: string,
+    questionId: string,
+    interviewId: string,
+    token: string
+  ) => {
+    console.log("🚀 Processing recording data...");
+    try {
+      // Video clip upload
+      if (videoChunks.length > 0) {
+        const videoBlob = new Blob(videoChunks, { type: "video/webm" });
+        const videoFile = new File([videoBlob], "clip.webm", { type: "video/webm" });
+        const clipForm = new FormData();
+        clipForm.append("video", videoFile);
+        clipForm.append("interview_id", interviewId);
+        clipForm.append("question_id", questionId);
+        await fetch(`${API_BASE}/video/upload-question-clip/`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: clipForm,
+        }).catch(console.error);
+      }
+
+      // Posture clip segmentation
+      const relSegments = segments
+        .filter((s) => s.start < duration && s.end > 0)
+        .map((s) => ({
+          start: Math.max(0, s.start),
+          end: Math.min(duration, s.end),
+        }));
+      if (relSegments.length > 0) {
+        const segmentPayload = {
+          interview_id: interviewId,
+          question_id: questionId,
+          segments: relSegments,
+          feedbacks: relSegments.map(() => ""),
+        };
+        await fetch(`${API_BASE}/video/extract-question-clip-segments/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(segmentPayload),
+        });
+      }
+
+      // Audio upload
+      const wavBlob = encodeWAV(
+        audioChunks.reduce((acc, cur) => {
+          const tmp = new Float32Array(acc.length + cur.length);
+          tmp.set(acc);
+          tmp.set(cur, acc.length);
+          return tmp;
+        }, new Float32Array()),
+        16000
+      );
+      const audioForm = new FormData();
+      audioForm.append("audio", new File([wavBlob], "answer.wav", { type: "audio/wav" }));
+      audioForm.append("transcript", new Blob([transcript], { type: "text/plain" }));
+      audioForm.append("email", userEmail);
+      audioForm.append("question_id", questionId);
+      if (currentUploadId) {
+        audioForm.append("upload_id", currentUploadId);
+      }
+      await fetch(`${API_BASE}/audio/upload/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: audioForm,
+      }).catch(console.error);
+
+      // Decide followup (moved here to ensure processing is done before potentially calling it)
+      const refinedTranscript = transcript.trim();
+      console.log("📌 꼬리질문 판단용 transcript:", refinedTranscript);
+
+      if (
+        refinedTranscript &&
+        refinedTranscript.toLowerCase() !== "blob" &&
+        refinedTranscript.length > 5
+      ) {
+        const shouldFollowup = await decideFollowup(
+          refinedTranscript,
+          qIdx
+        );
+        if (shouldFollowup) {
+          console.log("💡 Follow-up question generated, fetching updated questions...");
+          // Fetch updated questions from backend to get the new follow-up
+          const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!qRes.ok) {
+            console.error("❌ Failed to fetch updated questions after followup generation");
+            handleNext(); // Fallback to next question if fetch fails
+            return false;
+          }
+          const { questions: questionMap } = await qRes.json();
+
+          const emailPrefix = userEmail.split("@")[0];
+          const updatedQuestionList = (
+            Object.entries(questionMap) as [string, string][]
+          ).map(([id, text]) => ({
+            id,
+            text,
+            type: "behavioral",
+            difficulty: "medium",
+            audio_url: `${S3_BASE_URL}${emailPrefix}/${id}.wav`,
+          }));
+
+          // Sort again to ensure new follow-up is in correct order
+          const sortedUpdatedQuestionList = [...updatedQuestionList].sort((a, b) => {
+            const getNumericId = (id: string) => {
+              const match = id.match(/\d+/);
+              return match ? parseInt(match[0]) : Number.MAX_SAFE_INTEGER;
+            };
+            return getNumericId(a.id) - getNumericId(b.id);
+          });
+
+          setQuestions(sortedUpdatedQuestionList);
+          
+          // Find the index of the newly added follow-up question
+          const nextQIndex = sortedUpdatedQuestionList.findIndex(
+            (q) => q.id.startsWith(questions[qIdx].id + "-")
+          ); 
+          if (nextQIndex !== -1) {
+            setQIdx(nextQIndex); // Set current question index to the new follow-up
+          } else {
+            setQIdx(prev => prev + 1); // Fallback if not found, advance to next regular question
+          }
+          return true; // Indicate that a follow-up was generated and handled
+        }
+      }
+      handleNext(); // Call handleNext only after processing is complete and no followup was generated or handled
+
+    } catch (error) {
+      console.error("❌ Error processing recording data:", error);
+      handleNext(); // Ensure we still move on even if processing fails
+    }
+  };
 
   // 면접 종료
   const endInterview = async () => {
@@ -792,7 +787,7 @@ const [isPlayingAudio, setIsPlayingAudio] = useState<true | false | "pending">(f
                 variant="outline"
                 className="w-full mt-4"
                 onClick={handleNext}
-                disabled={isLoading || isPlayingAudio === true || isPlayingAudio === "pending"}
+                disabled={isLoading || isPlayingAudio}
               >
                 {qIdx < questions.length - 1 ? "다음 질문" : "면접 종료"}
               </Button>
