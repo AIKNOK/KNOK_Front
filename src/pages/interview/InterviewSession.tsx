@@ -17,7 +17,7 @@ interface Question {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
-const WS_BASE = API_BASE.replace("http", "ws"); // Convert http(s) to ws(s) for WebSocket URL
+// const WS_BASE = API_BASE.replace("http", "ws"); // Convert http(s) to ws(s) for WebSocket URL
 const MAX_ANSWER_DURATION = 90;
 const S3_BASE_URL = "https://knok-tts.s3.ap-northeast-2.amazonaws.com/";
 
@@ -38,6 +38,7 @@ export const InterviewSession = () => {
   const transcriptRef = useRef<string>("");
   const interviewStartRef = useRef<number>(0);
   const questionStartTimeRef = useRef<number>(0);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
   const auth = useAuth();
   const videoIdRef = useRef(
@@ -134,75 +135,6 @@ export const InterviewSession = () => {
     };
   }, [navigate]);
 
-  // WebSocket 연결 및 메시지 수신
-  useEffect(() => {
-    if (!auth.userEmail) return;
-
-    const userEmail = auth.userEmail;
-    const wsUrl = `${WS_BASE}/ws/questions?user_email=${userEmail}`;
-
-    wsRef.current = new WebSocket(wsUrl);
-
-    wsRef.current.onopen = () => {
-      console.log("✅ WebSocket connected to question server");
-    };
-
-    wsRef.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "new_question") {
-        console.log("🆕 New question received via WebSocket:", data);
-        const newQuestion: Question = {
-          id: data.question_number,
-          text: data.question,
-          type: "behavioral", // Or determine type based on backend data
-          difficulty: "medium", // Or determine difficulty based on backend data
-          audio_url: `${S3_BASE_URL}${userEmail.split('@')[0]}/${data.question_number}.wav`, // Construct audio URL if needed
-        };
-        setQuestions((prev) => {
-          const updated = [...prev];
-          // Find the correct position to insert the new question
-          // This logic assumes questions are ordered by number.
-          let inserted = false;
-          for (let i = 0; i < updated.length; i++) {
-            const currentQNum = parseInt(updated[i].id.split('-')[0]);
-            const newQNum = parseInt(newQuestion.id.split('-')[0]);
-            if (newQNum < currentQNum) {
-              updated.splice(i, 0, newQuestion);
-              inserted = true;
-              break;
-            } else if (newQNum === currentQNum) {
-              const currentSubQNum = parseInt(updated[i].id.split('-')[1] || '0');
-              const newSubQNum = parseInt(newQuestion.id.split('-')[1] || '0');
-              if (newSubQNum < currentSubQNum) {
-                updated.splice(i, 0, newQuestion);
-                inserted = true;
-                break;
-              }
-            }
-          }
-          if (!inserted) {
-            updated.push(newQuestion);
-          }
-          return updated;
-        });
-      }
-    };
-
-    wsRef.current.onclose = () => {
-      console.log("❌ WebSocket disconnected from question server");
-    };
-
-    wsRef.current.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, [auth.userEmail]);
-
   // 면접 시작 핸들러
   const onStart = async () => {
     const token = auth.token;
@@ -228,26 +160,36 @@ export const InterviewSession = () => {
           }`
         );
       }
-      // Frontend no longer needs to fetch all questions here as they will be pushed via WebSocket
-      // await new Promise((resolve) => setTimeout(resolve, 3000));
-      // const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
-      //   headers: { Authorization: `Bearer ${token}` },
-      // });
-      // if (!qRes.ok) throw new Error(qRes.statusText || String(qRes.status));
-      // const { questions: questionMap } = await qRes.json();
+      // Frontend now fetches all questions after generation, no longer relies on WebSocket push for initial set
+      const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!qRes.ok) throw new Error(qRes.statusText || String(qRes.status));
+      const { questions: questionMap } = await qRes.json();
 
-      // const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
-      // const filteredQuestionList = (
-      //   Object.entries(questionMap) as [string, string][]
-      // ).map(([id, text]) => ({
-      //   id,
-      //   text,
-      //   type: "behavioral",
-      //   difficulty: "medium",
-      //   audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
-      // }));
+      const email = auth.userEmail ? auth.userEmail.split("@")[0] : "anonymous";
+      const filteredQuestionList = (
+        Object.entries(questionMap) as [string, string][]
+      ).map(([id, text]) => ({
+        id,
+        text,
+        type: "behavioral",
+        difficulty: "medium",
+        audio_url: `${S3_BASE_URL}${email}/${id}.wav`,
+      }));
 
-      // setQuestions(sortedQuestionList); // Initial questions will be pushed via WS
+      // 자기소개 질문 맨 앞으로
+      const sortedQuestionList = [...filteredQuestionList].sort((a, b) => {
+        if (a.text.includes("자기소개")) return -1;
+        if (b.text.includes("자기소개")) return 1;
+        const getNumericId = (id: string) => {
+          const match = id.match(/\d+/);
+          return match ? parseInt(match[0]) : Number.MAX_SAFE_INTEGER;
+        };
+        return getNumericId(a.id) - getNumericId(b.id);
+      });
+
+      setQuestions(sortedQuestionList);
 
       // 이력서 텍스트 가져오기
       try {
@@ -293,7 +235,7 @@ export const InterviewSession = () => {
       existing_question_numbers: questions.map((q) => q.id),
     };
     console.log('[꼬리질문 요청]', payload);
-    const res = await fetch(`${API_BASE}/followup/check/`, {
+    const res = await fetch(`${API_BASE}/decide_followup_question/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -305,73 +247,37 @@ export const InterviewSession = () => {
     if (!res.ok) return false;
     const data = await res.json();
     console.log('[꼬리질문 데이터]', data);
-    // No longer updating questions here directly, as it will be pushed via WebSocket
-    // if (data.followup && data.question && data.question_number) {
-    //   setQuestions((prev) => {
-    //     const updated = [
-    // ...
-    //     return updated;
-    //   });
-    // }
-    return data.followup; // Still return whether a followup was decided
+    return data.followup_generated; // Return whether a followup was generated
   };
 
-  // 질문 인덱스 변경시 오디오 재생
+  // 질문 변경 시 오디오 재생 및 녹음 시작
   useEffect(() => {
-    if (isInterviewActive && questions[qIdx]) {
-      playQuestionAudio();
-    }
-    // eslint-disable-next-line
-  }, [isInterviewActive, qIdx, questions]);
-
-  // 질문 오디오 재생
-  const playQuestionAudio = async () => {
-    if (!questions[qIdx]) return;
-    try {
-      setIsPlayingAudio(true);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-      const audioUrl = questions[qIdx].audio_url;
-      if (audioUrl) {
-        try {
-          const response = await fetch(audioUrl);
-          if (!response.ok)
-            throw new Error(`오디오 fetch 실패: ${response.status}`);
-          const blob = await response.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          if (!audioRef.current) {
-            const audioElement = document.createElement("audio");
-            audioElement.hidden = true;
-            document.body.appendChild(audioElement);
-            audioRef.current = audioElement;
-          }
-          audioRef.current.src = blobUrl;
-          audioRef.current.onended = () => {
-            setIsPlayingAudio(false);
-            startRecording();
-            URL.revokeObjectURL(blobUrl);
-          };
-          audioRef.current.onerror = (e) => {
-            setIsPlayingAudio(false);
-            startRecording();
-            URL.revokeObjectURL(blobUrl);
-          };
-          await audioRef.current.play();
-        } catch (fetchError) {
+    if (isInterviewActive && questions.length > 0 && qIdx < questions.length) {
+      const currentQuestion = questions[qIdx];
+      if (currentQuestion.audio_url) {
+        setIsPlayingAudio(true);
+        console.log(`🎵 Attempting to play audio for question ${currentQuestion.id} from: ${currentQuestion.audio_url}`); // Added log
+        audioRef.current!.src = currentQuestion.audio_url;
+        audioRef.current!.onended = () => {
           setIsPlayingAudio(false);
           startRecording();
-        }
+        };
+        audioRef.current!.onerror = (e) => {
+          console.error("Audio playback error:", e);
+          setIsPlayingAudio(false);
+          startRecording(); // Proceed even if audio fails
+        };
+        audioRef.current!.play().catch((e) => {
+          console.error("Audio play promise rejected:", e);
+          setIsPlayingAudio(false);
+          startRecording(); // Proceed even if play fails
+        });
       } else {
-        setIsPlayingAudio(false);
+        // If no audio_url, start recording immediately (e.g., first question before TTS is ready)
         startRecording();
       }
-    } catch (error) {
-      setIsPlayingAudio(false);
-      startRecording();
     }
-  };
+  }, [qIdx, questions, isInterviewActive]);
 
   // 녹음 및 WebSocket 시작
   const startRecording = async () => {
@@ -397,6 +303,7 @@ export const InterviewSession = () => {
       if (audioCtx.state === "suspended") await audioCtx.resume();
 
       const source = audioCtx.createMediaStreamSource(streamRef.current!);
+      sourceRef.current = source; // Store source reference
       const processor = audioCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
       processor.onaudioprocess = (e) => {
@@ -416,7 +323,7 @@ export const InterviewSession = () => {
       timeoutRef.current = window.setTimeout(async () => {
         clearInterval(recordTimerRef.current!);
         await stopRecording();
-        handleNext();
+        // Removed handleNext here, it will be called from processRecordingData
       }, MAX_ANSWER_DURATION * 1000);
     };
 
@@ -461,7 +368,14 @@ export const InterviewSession = () => {
       wsRef.current.send(new TextEncoder().encode("END")); // Signal end to transcription
       wsRef.current.close(); // Immediately close WebSocket
     }
-    processorRef.current?.disconnect(); // Disconnect audio processor immediately
+    
+    // Properly disconnect audio nodes
+    if (sourceRef.current && processorRef.current) {
+      sourceRef.current.disconnect(processorRef.current);
+      processorRef.current.disconnect();
+      sourceRef.current = null;
+      processorRef.current = null;
+    }
 
     // Collect current audio chunks and transcript before clearing
     const currentAudioChunks = audioChunksRef.current;
@@ -469,7 +383,7 @@ export const InterviewSession = () => {
     const currentVideoChunks = questionVideoChunksRef.current;
     const currentRecordTime = recordTime;
     const currentSegments = segmentsRef.current;
-    
+
     // Clear refs for next recording
     audioChunksRef.current = [];
     transcriptRef.current = "";
@@ -485,10 +399,10 @@ export const InterviewSession = () => {
       currentRecordTime,
       currentSegments,
       uploadId,
-      auth.userEmail || "anonymous",
+      auth.userEmail!,
       questions[qIdx].id,
       videoId,
-      auth.token || ""
+      auth.token!
     );
   };
 
@@ -583,12 +497,53 @@ export const InterviewSession = () => {
           qIdx
         );
         if (shouldFollowup) {
-          console.log("Waiting for followup question via WebSocket after processing data...");
-          // Do not advance qIdx immediately, wait for WS to push
-          return; 
+          console.log("💡 Follow-up question generated, fetching updated questions...");
+          // Fetch updated questions from backend to get the new follow-up
+          const qRes = await fetch(`${API_BASE}/get_all_questions/`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!qRes.ok) {
+            console.error("❌ Failed to fetch updated questions after followup generation");
+            handleNext(); // Fallback to next question if fetch fails
+            return false;
+          }
+          const { questions: questionMap } = await qRes.json();
+
+          const emailPrefix = userEmail.split("@")[0];
+          const updatedQuestionList = (
+            Object.entries(questionMap) as [string, string][]
+          ).map(([id, text]) => ({
+            id,
+            text,
+            type: "behavioral",
+            difficulty: "medium",
+            audio_url: `${S3_BASE_URL}${emailPrefix}/${id}.wav`,
+          }));
+
+          // Sort again to ensure new follow-up is in correct order
+          const sortedUpdatedQuestionList = [...updatedQuestionList].sort((a, b) => {
+            const getNumericId = (id: string) => {
+              const match = id.match(/\d+/);
+              return match ? parseInt(match[0]) : Number.MAX_SAFE_INTEGER;
+            };
+            return getNumericId(a.id) - getNumericId(b.id);
+          });
+
+          setQuestions(sortedUpdatedQuestionList);
+          
+          // Find the index of the newly added follow-up question
+          const nextQIndex = sortedUpdatedQuestionList.findIndex(
+            (q) => q.id.startsWith(questions[qIdx].id + "-")
+          ); 
+          if (nextQIndex !== -1) {
+            setQIdx(nextQIndex); // Set current question index to the new follow-up
+          } else {
+            setQIdx(prev => prev + 1); // Fallback if not found, advance to next regular question
+          }
+          return true; // Indicate that a follow-up was generated and handled
         }
       }
-      handleNext(); // Call handleNext only after processing is complete
+      handleNext(); // Call handleNext only after processing is complete and no followup was generated or handled
 
     } catch (error) {
       console.error("❌ Error processing recording data:", error);
