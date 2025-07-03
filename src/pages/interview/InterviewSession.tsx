@@ -270,16 +270,17 @@ export const InterviewSession = () => {
     console.log("[꼬리질문 데이터]", data);
 
     /* ② audio_url 없으면 10초 기다렸다 재조회 */
-    if (data.followup_generated && !data.audio_url) {
+    if (data.followup && !data.audio_url) {
       await sleep(15000); // 10초 blocking (컴포넌트 언마운트 시 취소하려면 AbortController 사용)
 
       // 보조 엔드포인트 예시: GET /followup/audio/<qNum>
       const audioRes = await fetch(
-        `${API_BASE}/followup/audio?qn=${data.question_number}`,
+        `${API_BASE}/followup/audio/question${data.question_number}/`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (audioRes.ok) {
         const { audio_url } = await audioRes.json();
+        console.log("🎧 follow-up audio url ▶", audio_url);
         data.audio_url = audio_url; // 성공 시 삽입
       }
       // 실패해도 텍스트만 먼저 추가하도록 지나감
