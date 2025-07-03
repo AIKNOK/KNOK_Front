@@ -271,7 +271,7 @@ export const InterviewSession = () => {
 
     /* ② audio_url 없으면 10초 기다렸다 재조회 */
     if (data.followup && !data.audio_url) {
-      await sleep(15000); // 10초 blocking (컴포넌트 언마운트 시 취소하려면 AbortController 사용)
+      await sleep(30000); // 10초 blocking (컴포넌트 언마운트 시 취소하려면 AbortController 사용)
 
       // 보조 엔드포인트 예시: GET /followup/audio/<qNum>
       const audioRes = await fetch(
