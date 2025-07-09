@@ -577,6 +577,7 @@ export const InterviewSession = () => {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(analyzePayload),
+          credentials : "include",
         });
 
         if (!r2.ok) {
