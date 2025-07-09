@@ -624,7 +624,15 @@ export const InterviewSession = () => {
         console.error("최종 분석 실패:", e);
         console.error("실패 당시 uploadId:", uploadId);
         console.error("실패 당시 posture_count:", countsRef.current);
-        alert("최종 분석 실패");
+        alert("피드백 페이지로 이동합니다.");
+        navigate("/interview/feedback", {
+          state: {
+            upload_id: videoId, // Use videoId as interview_id
+            segments: [], // Segments will be fetched in FeedbackReport
+            analysis: {},
+            clips: [], // Clips will be fetched in FeedbackReport
+          },
+        });
       }
     } else {
       navigate("/interview/feedback", {
