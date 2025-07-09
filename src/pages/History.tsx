@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import { Download, Loader } from "lucide-react";
 import { saveAs } from "file-saver";
 import { Button } from "../components/shared/Button";
-import { useAuth } from "../contexts/AuthContext";
+// import { useAuth } from "../contexts/AuthContext"; // 더미라면 주석 처리 가능
 
 interface FeedbackItem {
   video_id: string;
@@ -12,55 +11,55 @@ interface FeedbackItem {
   pdf_url: string;
 }
 
-
 const getFaceImg = (score: number) => {
   if (score >= 80) return "/smile.png";
   if (score >= 50) return "/soso.png";
   return "/sad.png";
 };
 
+const today = new Date();
+const yyyy = today.getFullYear();
+const mm = String(today.getMonth() + 1).padStart(2, "0");
+const dd = String(today.getDate()).padStart(2, "0");
+const hh = String(today.getHours()).padStart(2, "0");
+const mi = String(today.getMinutes()).padStart(2, "0");
+
+// 오늘 날짜 더미 데이터
+const DUMMY_DATA: FeedbackItem[] = [
+  {
+    video_id: "dummy_video_id_1",
+    created_at: new Date().toISOString(),
+    total_score: 90,
+    pdf_url: "/dummy_interview.pdf",
+  },
+  {
+    video_id: "dummy_video_id_2",
+    created_at: new Date(Date.now() - 86400000).toISOString(), // 어제 날짜 예시
+    total_score: 67,
+    pdf_url: "/dummy_interview2.pdf",
+  },
+];
+
 const History: React.FC = () => {
   const [data, setData] = useState<FeedbackItem[]>([]);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [filterDate, setFilterDate] = useState<string>("");
   const [loadingVideoId, setLoadingVideoId] = useState<string | null>(null);
-  const auth = useAuth();
-  const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const sort = "created_at";
-        const order = sortOrder === "newest" ? "desc" : "asc";
-        const token = auth.token;
-        if (!token) {
-          console.warn("No token found for history fetch.");
-          return;
-        }
-        const res = await axios.get(`${API_BASE}/feedback/history?sort=${sort}&order=${order}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        console.log("📦 feedback response", res.data); 
-        setData(res.data);
-      } catch (err) {
-        console.error("피드백 히스토리 불러오기 실패", err);
-      }
-    };
-    fetchData();
-  }, [sortOrder, auth.token]);
+    // 실제 axios 대신 더미 데이터 세팅!
+    setTimeout(() => setData(DUMMY_DATA), 500);
+  }, [sortOrder]);
 
   const filteredData = filterDate
-  ? data.filter((item) => {
-      const itemDate = new Date(item.created_at).toISOString().slice(0, 10);
-      return itemDate === filterDate;
-    })
-  : data;
+    ? data.filter((item) => {
+        const itemDate = new Date(item.created_at).toISOString().slice(0, 10);
+        return itemDate === filterDate;
+      })
+    : data;
 
   const formatKST = (utcDate: string) => {
     const date = new Date(utcDate);
-    // UTC → KST (+9시간)
     date.setHours(date.getHours() + 9);
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, "0");
@@ -70,41 +69,22 @@ const History: React.FC = () => {
     return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
   };
 
-  // PDF 다운로드 버튼 클릭 시 실행되는 함수
+  // 더미 PDF 파일 다운로드
   const downloadPDF = async (videoId: string, createdAt: string) => {
-  try {
-    setLoadingVideoId(videoId);
-    const token = auth.token;
-    if (!token) {
-      console.warn("No token found for PDF download.");
-      return;
+    try {
+      setLoadingVideoId(videoId);
+      // 실제 서버가 아니라 public 폴더에 있는 파일 다운로드
+      const found = DUMMY_DATA.find((item) => item.video_id === videoId);
+      if (!found) return;
+      const response = await fetch(found.pdf_url);
+      const blob = await response.blob();
+      saveAs(blob, `${formatKST(createdAt).replace(/[: ]/g, "_")}_interview.pdf`);
+    } catch (err) {
+      alert("다운로드 실패");
+    } finally {
+      setLoadingVideoId(null);
     }
-    const res = await axios.get(`${API_BASE}/get-signed-url`, {
-      params: { video_id: videoId },
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    console.log(videoId)
-    const signedUrl = res.data.signed_url;
-    console.log("📦 signed_url:", signedUrl);
-    const date = new Date(createdAt);
-    const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
-      date.getDate()
-    ).padStart(2, '0')}_${String(date.getHours()).padStart(2, '0')}:${String(
-      date.getMinutes()
-    ).padStart(2, '0')}`;
-
-    const filename = `${formattedDate}_interview.pdf`;
-    const response = await fetch(signedUrl);
-    const blob = await response.blob();
-    saveAs(blob, filename);
-  } catch (err) {
-    console.error("다운로드 실패:", err);
-  } finally {
-    setLoadingVideoId(null);
-  }
-};
+  };
 
   return (
     <div className="max-w-3xl mx-auto py-10 px-4">
