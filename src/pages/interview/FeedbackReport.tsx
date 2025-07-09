@@ -151,12 +151,6 @@ const FeedbackReport: React.FC = () => {
         >
           {isDownloading ? "다운로드 중..." : "ZIP 다운로드"}
         </Button>
-        <Button
-          className="ml-2"
-          onClick={handleGeneratePDF}
-        >
-          PDF로 저장
-        </Button>
       </div>
 
       <div
