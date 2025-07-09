@@ -211,8 +211,17 @@ export const InterviewSession = () => {
         return getNumericId(a.id) - getNumericId(b.id);
       });
 
-      setQuestions(sortedQuestionList);
+      if (sortedQuestionList.length === 5) {
+        const clonedIdx = 2;
+        const copied = { ...sortedQuestionList[clonedIdx] };
+        copied.id = `${copied.id}_copy`;
+        copied.text += " (보충 질문)";
 
+        sortedQuestionList.splice(4, 0, copied);
+      }
+
+      setQuestions(sortedQuestionList);
+      
       // 이력서 텍스트 가져오기
       try {
         const rRes = await fetch(`${API_BASE}/get-resume-text/`, {
@@ -553,9 +562,26 @@ export const InterviewSession = () => {
 
     // Final full interview video processing (이제 전체 영상 업로드 안함)
     if (!uploadId) {
-      console.warn(
-        "Upload ID가 없어 최종 분석을 건너뛰고 피드백 페이지로 이동합니다."
-      );
+      console.warn("Upload ID가 없어 최종 분석을 건너뛰고 피드백 페이지로 이동합니다.");
+      navigate("/interview/feedback", {
+        state: {
+          upload_id: videoId, // Use videoId as interview_id
+          segments: [], // Segments will be fetched in FeedbackReport
+          analysis: {},
+          clips: [],
+        },
+      });
+      setQuestions([]);
+      setQIdx(0);
+      setIsInterviewActive(false);
+      setTranscript("");
+      audioChunksRef.current = [];
+      if (audioRef.current) {
+        audioRef.current.pause();
+        setIsPlayingAudio(false);
+      }
+      setIsLoading(false);
+      return;
     }
 
     // Existing posture analysis upload remains (countsRef.current)

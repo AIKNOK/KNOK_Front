@@ -1,7 +1,6 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';   
-import { Button } from '../../components/shared/Button';
-import { Radar } from 'react-chartjs-2';
+import React, { useRef, useState } from "react";
+import { Button } from "../../components/shared/Button";
+import { Radar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   RadialLinearScale,
@@ -11,9 +10,8 @@ import {
   Tooltip,
   Legend,
   ChartOptions,
-} from 'chart.js';
-import html2pdf from 'html2pdf.js';
-import { useAuth } from '../../contexts/AuthContext';
+} from "chart.js";
+import html2pdf from "html2pdf.js";
 
 ChartJS.register(
   RadialLinearScale,
@@ -24,295 +22,95 @@ ChartJS.register(
   Legend
 );
 
-interface FeedbackDetail {
-  [key: string]: string;
-}
-interface FeedbackChart {
-  [key: string]: number;
-}
-interface FeedbackResponse {
-  summary?: string;
-  detail?: Record<string,string>;
-  chart?: Record<string,number>;
-  score?: number;
-  error?: string;
-  raw?: string;
-}
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
-
-const FeedbackReport: React.FC = () => {
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const { token } = useAuth();
-
-  // PDF 업로드 완료를 추적
-  const [isPdfUploaded, setIsPdfUploaded] = useState(false);
-
-  // ZIP 다운로드용
-  const reportRef = useRef<HTMLDivElement>(null);
-  const [feedback, setFeedback] = useState<FeedbackResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // PDF 다운로드에 필요한 값
-  const location = useLocation();
-  const {
-    analysis,
-    upload_id,     // 이제 videoId 역할
-    email_prefix,
-    feedbackText,
-  } = (location.state ?? {}) as {
-    analysis: any;
-    upload_id: string;
-    email_prefix?: string;
-    feedbackText: string;
-  };
-  console.log("[FeedbackReport] 전달받은 state:", location.state);
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  // 피드백 prsighned URL 제공
-  const [clips, setClips] = useState<
-    { clipUrl: string; thumbnailUrl: string; feedback: string }[]
-  >([]);
-
-  // 차트를 이미지로 변환
-  const chartRef = useRef<any>(null);
-  const prepareChartImage = () => {
-    const chartInst = chartRef.current;
-    if (!chartInst) return;
-    const base64 = chartInst.toBase64Image();
-    const img = document.createElement('img');
-    img.src = base64;
-    img.style.width = '100%';
-    img.style.height = 'auto';
-    const container = document.getElementById('chart-container');
-    if (container) {
-      container.innerHTML = '';
-      container.appendChild(img);
-    }
-  };
-
-  // pdf 변환
-  const generatePDFBlob = async (): Promise<Blob> => {
-    if (!reportRef.current) throw new Error("리포트 DOM이 없습니다.");
-
-    const opt = {
-      margin: 0,
-      filename: 'feedback.pdf',
-      html2canvas: { scale: 2 },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'] as unknown as string[] },
-    };
-
-    const pdfBlob: Blob = await html2pdf()
-      .set(opt)
-      .from(reportRef.current)
-      .outputPdf('blob');
-
-    return pdfBlob;
-  };
-  
-  // PDF 업로드
-  const handleGenerateAndUploadPDF = async () => {
-  try {
-    const blob = await generatePDFBlob();
-
-    const formData = new FormData();
-    formData.append('pdf', blob, 'feedback_report.pdf');
-    formData.append('video_id', upload_id);
-
-    if (!token) {
-      throw new Error('인증 토큰이 없습니다.');
-    }
-
-    const res = await fetch(`${API_BASE}/upload/pdf/`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
-    if (!res.ok) throw new Error('PDF 업로드 실패');
-
-    const data: { pdf_url: string } = await res.json();
-    setPdfUrl(data.pdf_url);
-    return data;
-  } catch (e: any) {
-    console.error('PDF 생성 또는 업로드 실패', e);
-    throw e;
-  }
+// 1. 더미 데이터 선언
+const MOCK_FEEDBACK = {
+  summary: "전체적으로 논리적인 답변과 침착한 태도가 돋보였습니다. 자기소개에서 자신만의 강점을 분명하게 언급한 점이 인상적이었으며, 꼬리 질문에도 당황하지 않고 차분하게 답변한 점이 좋았습니다.",
+  detail: {
+    "자기소개": "구체적인 경험을 잘 녹여서 자신을 소개한 점이 강점입니다.",
+    "직무 역량": "기술적 역량에 대한 이해도가 충분히 드러났습니다.",
+    "성장 경험": "실패 경험과 그로부터의 배움을 적극적으로 설명했습니다.",
+    "커뮤니케이션": "질문자의 의도를 파악해 명확하게 답변을 제시했습니다.",
+    "태도/자세": "면접 내내 자세를 바르게 유지하였고, 자신감이 느껴졌습니다."
+  },
+  chart: {
+    "논리성": 4.5,
+    "전문성": 4.0,
+    "소통능력": 4.0,
+    "태도": 4.5,
+    "자기소개": 5.0
+  },
+  score: 90, // 80 이상이므로 smile.png
 };
 
-  // 2) ZIP 다운로드 핸들러
+const MOCK_CLIPS = [
+  {
+    clipUrl: "https://knok-tts.s3.ap-northeast-2.amazonaws.com/dummy/clip1.webm",
+    thumbnailUrl: "thumbnail.png", // public/thumbnail.png
+    feedback: "시선이 잠깐 아래로 내려갔습니다. 답변 중간에도 정면을 바라보세요.",
+  },
+  {
+    clipUrl: "https://knok-tts.s3.ap-northeast-2.amazonaws.com/dummy/clip2.webm",
+    thumbnailUrl: "thumbnail.png",
+    feedback: "어깨가 한쪽으로 기울어졌습니다. 바른 자세를 유지해주세요.",
+  },
+  {
+    clipUrl: "https://knok-tts.s3.ap-northeast-2.amazonaws.com/dummy/clip3.webm",
+    thumbnailUrl: "thumbnail.png",
+    feedback: "손동작이 빈번하게 나타납니다. 필요할 때만 손동작을 사용하는 연습이 필요합니다.",
+  },
+];
+
+// 2. ZIP 다운로드: 진짜 백엔드가 없으므로 더미 zip 생성 (간단하게 Blob으로!)
+const createDummyZipBlob = () => {
+  // 실제로는 zip 파일이어야 하지만, 데모용이니 텍스트 파일로 만듦
+  const text = "이 파일은 데모용 ZIP 파일입니다.\n실제 분석 결과와는 무관합니다.";
+  return new Blob([text], { type: "application/zip" });
+};
+
+const FeedbackReport: React.FC = () => {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isPdfUploaded, setIsPdfUploaded] = useState(true); // PDF 업로드 항상 true(시연)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  // pdf 생성용
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  // PDF 다운로드/업로드: 실제 업로드 없이 Blob만 다운로드
+  const handleGeneratePDF = async () => {
+    if (!reportRef.current) return;
+    const opt = {
+      margin: 0,
+      filename: "feedback.pdf",
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ["css", "legacy"] as unknown as string[] },
+    };
+    await html2pdf().set(opt).from(reportRef.current).save();
+  };
+
+  // ZIP 다운로드 핸들러 (가짜)
   const handleDownload = async () => {
-    if (!upload_id) {
-      alert('videoId가 필요합니다.');
-      return;
-    }
     setIsDownloading(true);
     try {
-      if (!token) {
-        throw new Error('인증 토큰이 없습니다.');
-      }
-      const res = await fetch(`${API_BASE}/download/feedback-zip/`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          videoId:upload_id,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.text();
-        alert('다운로드 실패\n' + err);
-        return;
-      }
-      const blob = await res.blob();
+      const blob = createDummyZipBlob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `${upload_id}_feedback.zip`;
+      a.download = `demo_feedback.zip`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-      alert('ZIP 다운로드 완료');
+      alert("ZIP 다운로드 완료 (데모용)");
     } catch (err) {
-      alert('다운로드 중 에러 발생: ' + err);
+      alert("다운로드 중 에러 발생: " + err);
     } finally {
       setIsDownloading(false);
     }
   };
 
-  // 메인 로직
-  useEffect(() => {
-    if (!analysis) {
-      console.error("❌ analysis 없음");
-      return;
-    }
-    console.log("📦 analysis 데이터:", analysis);
-    const fetchFeedback = async () => {
-      setLoading(true);
-      try {
-        // 피드백 생성
-        if (!token) {
-          throw new Error('인증 토큰이 없습니다.');
-        }
-        const fRes = await fetch(
-          `${API_BASE}/interview/feedback/generate/`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ analysis, email_prefix, upload_id }),
-          }
-        );
-        console.log("[FeedbackReport] generate 호출 body:", { analysis, email_prefix, upload_id });
-        if (!fRes.ok) throw new Error(`서버 에러 ${fRes.status}`);
-        const data = await fRes.json();
-        console.log("❗️ generate_feedback_report 응답:", data);
-        console.log("[FeedbackReport] 서버에서 받은 피드백:", data);
-        setFeedback(data);
-
-        // 자세 문제에 따른 피드백 생성 함수 추가
-        const generatePostureFeedback = (reason: string): string => {
-          switch(reason) {
-            case 'shoulder':
-              return '어깨 자세가 바르지 않습니다. 어깨를 펴고 바른 자세를 유지하세요.';
-            case 'headDown':
-              return '고개를 숙이고 있습니다. 시선을 정면으로 유지하세요.';
-            case 'ear':
-              return '귀를 만지는 습관이 있습니다. 면접 중 불필요한 동작을 자제하세요.';
-            case 'gaze':
-              return '시선이 불안정합니다. 면접관을 바라보며 자신감 있는 태도를 보이세요.';
-            default:
-              return '자세를 바르게 유지하세요.';
-          }
-        };
-
-        // bad_posture_clips API 호출
-        try {
-          const clipsRes = await fetch(`${API_BASE}/video/get-clips-and-segments/`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({ interview_id: upload_id }),
-          });
-
-          if (!clipsRes.ok) {
-            throw new Error(`Failed to fetch clips and segments: ${clipsRes.statusText}`);
-          }
-          const clipsData = await clipsRes.json();
-          setClips(clipsData.clips || []);
-          // Note: segments are not directly set here as they're not used in the current UI after being fetched.
-        } catch (clipFetchError) {
-          console.error("Error fetching clips and segments:", clipFetchError);
-          setClips([]);
-        }
-
-        // 자동 PDF 생성 및 업로드
-        setTimeout(async () => {
-          try {
-            const { pdf_url } = await handleGenerateAndUploadPDF();  // ← 여기가 { url: S3_URL } 리턴하는 부분
-            setPdfUrl(pdf_url); // 저장된 S3 URL 백엔드로 다시 전달하기 위함
-            setIsPdfUploaded(true); // PDF 업로드 완료 표시
-            console.log("PDF 업로드 완료:", pdf_url);
-          } catch (e) {
-            console.error("PDF 생성 또는 업로드 실패", e);
-          }
-        }, 1000);
-      } catch (err) {
-        console.error('피드백 불러오기 실패:', err);
-        // 서버에서 { error, raw } 형태로 내려왔다면 feedback에 담아두고
-        setFeedback((prev) => ({ ...(prev as any), error: (err as Error).message }));
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchFeedback();
-  }, [analysis, email_prefix, upload_id]);
-
-  
-
-  if (loading) {
-    return <div className="text-center p-6">피드백 로딩 중...</div>;
-  }
-  
-  if (feedback?.error) {
-    return (
-      <div className="text-center p-6 text-red-500">
-        피드백 생성 중 오류 발생:<br />
-        {feedback.error}<br />
-        (원시 응답: {feedback.raw?.slice(0, 100)}…)
-      </div>
-    );
-  }
-
-  if (!feedback) {
-    return (
-      <div className="text-center p-6 text-red-500">
-        피드백을 불러오지 못했습니다.
-      </div>
-    );
-  }
-
-  // 3) 비구조화 + 기본값
-  const {
-    summary = '',
-    detail = {},
-    chart = {},
-    score = 0,
-  } = feedback;
-
-  // 4) 차트 데이터 유무
-  const hasChartData = Object.keys(chart).length > 0;
-
-  // 5) 차트 옵션 (반드시 JSX보다 위에 선언!)
-  const chartOptions: ChartOptions<'radar'> = {
+  // 차트 옵션
+  const chartOptions: ChartOptions<"radar"> = {
     scales: {
       r: {
         min: 0,
@@ -323,26 +121,36 @@ const FeedbackReport: React.FC = () => {
     },
     plugins: {
       legend: {
-        position: 'top',
-        align: 'end',
+        position: "top",
+        align: "end",
         labels: { font: { size: 14 } },
       },
     },
   };
 
-  // 6) 표정 이미지 결정
+  // 표정 이미지 (score 기준)
+  const score = MOCK_FEEDBACK.score || 0;
   const expressionImg =
     score >= 80
-      ? '/smile.png'
+      ? "/smile.png"
       : score >= 50
-      ? '/soso.png'
-      : '/sad.png';
+      ? "/soso.png"
+      : "/sad.png";
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-4 pt-12">
       <div className="text-right">
-        <Button onClick={handleDownload} disabled={isDownloading || !isPdfUploaded}>
-          {isDownloading ? '다운로드 중...' : 'ZIP 다운로드'}
+        <Button
+          onClick={handleDownload}
+          disabled={isDownloading || !isPdfUploaded}
+        >
+          {isDownloading ? "다운로드 중..." : "ZIP 다운로드"}
+        </Button>
+        <Button
+          className="ml-2"
+          onClick={handleGeneratePDF}
+        >
+          PDF로 저장
         </Button>
       </div>
 
@@ -358,7 +166,7 @@ const FeedbackReport: React.FC = () => {
             <h2 className="text-xl font-semibold mb-2 text-center">
               종합 소견
             </h2>
-            <p>{summary}</p>
+            <p>{MOCK_FEEDBACK.summary}</p>
           </div>
           <div className="col-span-3 p-4 border rounded flex flex-col items-center justify-center">
             <h2 className="text-xl font-semibold mb-2">면접관 표정</h2>
@@ -370,94 +178,78 @@ const FeedbackReport: React.FC = () => {
           </div>
         </div>
 
-        {/* 조건부 렌더링: 차트 */}
-        {hasChartData ? (
-          <div className="p-4 border rounded mb-6">
-            <h2 className="text-xl font-semibold text-center mb-2">
-              면접 결과 분석
-            </h2>
-            <Radar
-              ref={chartRef}
-              data={{
-                labels: Object.keys(chart),
-                datasets: [
-                  {
-                    label: '면접 평가',
-                    data: Object.values(chart),
-                    backgroundColor: 'rgba(147, 51, 234, 0.4)',
-                    borderColor: '#9333ea',
-                    borderWidth: 2,
-                  },
-                ],
-              }}
-              options={chartOptions}
-            />
-          </div>
-        ) : (
-          <div className="text-center text-gray-500 py-6">
-            아직 차트 데이터가 없습니다.
-          </div>
-        )}
-        {/* 페이지 브레이크 */}
-        <div className="page-break">
+        {/* 차트 */}
+        <div className="p-4 border rounded mb-6">
+          <h2 className="text-xl font-semibold text-center mb-2">
+            면접 결과 분석
+          </h2>
+          <Radar
+            data={{
+              labels: Object.keys(MOCK_FEEDBACK.chart),
+              datasets: [
+                {
+                  label: "면접 평가",
+                  data: Object.values(MOCK_FEEDBACK.chart),
+                  backgroundColor: "rgba(147, 51, 234, 0.4)",
+                  borderColor: "#9333ea",
+                  borderWidth: 2,
+                },
+              ],
+            }}
+            options={chartOptions}
+          />
+        </div>
 
         {/* 상세 분석 */}
-        <div className="p-4 border rounded space-y-4">
-          <h2 className="text-xl font-semibold text-center mb-2">
-            상세 분석
-          </h2>
-          {Object.entries(detail).map(([title, content]) => (
-            <div key={title}>
-              <h3 className="font-semibold text-lg">{title}</h3>
-              <p className="pl-2">{content}</p>
-            </div>
-          ))}
-        </div>
+        <div className="page-break">
+          <div className="p-4 border rounded space-y-4">
+            <h2 className="text-xl font-semibold text-center mb-2">
+              상세 분석
+            </h2>
+            {Object.entries(MOCK_FEEDBACK.detail).map(([title, content]) => (
+              <div key={title}>
+                <h3 className="font-semibold text-lg">{title}</h3>
+                <p className="pl-2">{content}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-      {feedback?.error && (
-        <div className="text-red-500">{feedback.error}</div>
-      )}
 
-      {/* ─── ④ 썸네일 & 링크 렌더링 ─────────────────── */}
-      {clips.length > 0 && (
+      {/* 썸네일 & 클립 */}
+      {MOCK_CLIPS.length > 0 && (
         <section className="mt-8">
           <h2 className="text-xl font-semibold mb-4">추출된 클립</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {clips.map((c, i) => {
-              // 썸네일 URL 콘솔 확인 (디버깅용)
-              console.log("썸네일 URL", c.thumbnailUrl);
-              return (
-                <div key={i} className="border rounded-lg p-4">
-                  <img
-                    src={c.thumbnailUrl}
-                    alt={`Clip ${i + 1}`}
-                    className="w-full h-auto mb-2 rounded-md"
-                    onError={e => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = "/no_thumbnail.png";
-                    }}
-                  />
-                  <a
-                    href={c.clipUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 underline"
-                  >
-                    클립 {i + 1} 보기
-                  </a>
-                  {c.feedback && (
-                    <p className="mt-2 text-sm text-gray-600">{c.feedback}</p>
-                  )}
-                </div>
-              );
-            })}
+            {MOCK_CLIPS.map((c, i) => (
+              <div key={i} className="border rounded-lg p-4">
+                <img
+                  src={c.thumbnailUrl}
+                  alt={`Clip ${i + 1}`}
+                  className="w-full h-auto mb-2 rounded-md"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = "/no_thumbnail.png";
+                  }}
+                />
+                <a
+                  href={c.clipUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 underline"
+                >
+                  클립 {i + 1} 보기
+                </a>
+                {c.feedback && (
+                  <p className="mt-2 text-sm text-gray-600">{c.feedback}</p>
+                )}
+              </div>
+            ))}
           </div>
         </section>
       )}
     </div>
   );
 };
-
 
 export default FeedbackReport;
