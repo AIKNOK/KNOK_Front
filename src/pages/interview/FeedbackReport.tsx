@@ -101,12 +101,12 @@ const FeedbackReport: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `demo_feedback.zip`;
+      a.download = `feedback.zip`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-      alert("ZIP 다운로드 완료 (데모용)");
+      alert("ZIP 다운로드 완료");
     } catch (err) {
       alert("다운로드 중 에러 발생: " + err);
     } finally {
