@@ -22,7 +22,7 @@ ChartJS.register(
   Legend
 );
 
-// 1. 더미 데이터 선언 (6가지 평가항목)
+// 더미 데이터 선언 (6가지 평가항목)
 const MOCK_FEEDBACK = {
   summary:
     "전반적으로 논리적인 답변과 침착한 태도가 인상적이었습니다. 꼬리 질문에도 당황하지 않고 차분하게 답변한 점이 좋았고, 실제 경험을 바탕으로 한 구체적 설명이 신뢰감을 높였습니다.",
@@ -55,23 +55,20 @@ const MOCK_CLIPS = [
   {
     clipUrl: "/1.webm",
     thumbnailUrl: "thumbnail.png",
-    feedback: "시선이 잠깐 아래로 내려갔습니다. 답변 중간에도 정면을 바라보세요.",
   },
   {
     clipUrl: "/2.webm",
     thumbnailUrl: "thumbnail.png",
-    feedback: "어깨가 한쪽으로 기울어졌습니다. 바른 자세를 유지해주세요.",
   },
   {
     clipUrl: "/3.webm",
     thumbnailUrl: "thumbnail.png",
-    feedback: "손동작이 빈번하게 나타납니다. 필요할 때만 손동작을 사용하는 연습이 필요합니다.",
   },
 ];
 
-// 2. ZIP 다운로드: 진짜 백엔드가 없으므로 더미 zip 생성 (간단하게 Blob으로)
+// ZIP 다운로드: 더미 zip 생성 (간단하게 Blob으로)
 const createDummyZipBlob = () => {
-  const text = "이 파일은 데모용 ZIP 파일입니다.\n실제 분석 결과와는 무관합니다.";
+  const text = "피드백 ZIP 파일입니다.";
   return new Blob([text], { type: "application/zip" });
 };
 
@@ -232,9 +229,6 @@ const FeedbackReport: React.FC = () => {
                 >
                   클립 {i + 1} 보기
                 </a>
-                {c.feedback && (
-                  <p className="mt-2 text-sm text-gray-600">{c.feedback}</p>
-                )}
               </div>
             ))}
           </div>
