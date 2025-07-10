@@ -28,7 +28,7 @@
     "@types/react-toastify": "^4.0.2",
     "axios": "^1.10.0",
     "buffer": "^6.0.3",
-    "chart.js": "^4.4.9",
+    "chart.js": "^4.5.0",
     "clsx": "^2.1.1",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.14.0",

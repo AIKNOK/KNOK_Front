@@ -22,35 +22,39 @@ ChartJS.register(
   Legend
 );
 
-// 1. 더미 데이터 선언
+// 1. 더미 데이터 선언 (6가지 평가항목)
 const MOCK_FEEDBACK = {
-  summary: "전체적으로 논리적인 답변과 침착한 태도가 돋보였습니다. 자기소개에서 자신만의 강점을 분명하게 언급한 점이 인상적이었으며, 꼬리 질문에도 당황하지 않고 차분하게 답변한 점이 좋았습니다.",
+  summary:
+    "전반적으로 논리적인 답변과 침착한 태도가 인상적이었습니다. 꼬리 질문에도 당황하지 않고 차분하게 답변한 점이 좋았고, 실제 경험을 바탕으로 한 구체적 설명이 신뢰감을 높였습니다.",
   detail: {
-    "자기소개":
-      "자기소개에서 본인의 핵심 강점과 이를 뒷받침하는 경험을 구체적으로 설명하여 신뢰감을 주었습니다. 특히, 특정 프로젝트에서 맡았던 역할과 해당 경험이 지원 직무와 어떻게 연관되는지 명확히 언급한 점이 인상적이었습니다.",
-    "직무 역량":
-      "직무에 필요한 기술 스택에 대한 이해도가 충분히 드러났으며, 실제로 업무에 적용한 사례를 구체적으로 설명해 주셨습니다. 예를 들어, 클라우드 환경에서의 실습 경험이나 협업 프로젝트에서 맡았던 역할을 통해 문제해결 능력과 실무 역량이 입증되었습니다.",
-    "성장 경험":
-      "실패 경험을 단순히 언급하는 데 그치지 않고, 해당 경험을 통해 얻은 교훈과 성장 과정을 논리적으로 설명했습니다. 어려움을 극복하기 위해 어떤 노력을 했는지, 그리고 이후 비슷한 상황에서 어떻게 행동이 변화했는지를 구체적으로 보여주었습니다.",
-    "커뮤니케이션":
-      "답변 과정에서 질문자의 의도를 빠르게 파악하여, 명확하고 간결하게 답변을 제시했습니다. 또한, 동료와의 협업 경험에서 갈등을 효과적으로 조율하고, 피드백을 수용하는 자세를 강조한 점이 긍정적으로 평가됩니다.",
-    "태도/자세":
-      "면접 내내 단정한 자세와 차분한 태도를 유지하였으며, 어려운 질문에도 당황하지 않고 침착하게 대응하는 모습이 인상적이었습니다. 적절한 눈맞춤과 자신감 있는 목소리로 답변을 이어가, 전문적인 이미지를 보여주었습니다."
+    일관성:
+      "답변 전반에 걸쳐 논리적 일관성이 유지되었으며, 질문과 무관한 내용의 반복이나 중복 없이 자연스럽게 흐름을 이어갔습니다.",
+    논리성:
+      "각 질문에 대해 명확한 근거와 이유를 제시하여 주장을 논리적으로 전달했습니다. 특히 자신의 경험과 배운 점을 구체적으로 연결해 설명한 부분이 좋았습니다.",
+    대처능력:
+      "예상하지 못한 추가 질문에도 침착하게 자신의 생각을 정리해 답변하였으며, 답변 도중 잠시 멈췄으나 빠르게 상황을 수습하고 논지를 잃지 않았습니다.",
+    구체성:
+      "단순히 원론적인 답변에 그치지 않고 실제 프로젝트, 협업 경험, 문제 해결 사례 등 구체적인 에피소드를 적극적으로 활용해 설득력을 높였습니다.",
+    말하기방식:
+      "적당한 속도와 정확한 발음으로 또렷하게 답변을 이어갔으며, 복잡한 내용도 조리 있게 정리해 전달하는 점이 긍정적으로 평가되었습니다.",
+    면접태도:
+      "자신감 있는 목소리와 바른 자세를 유지했으며, 질문자와 적절히 시선을 맞추는 등 면접 예절을 잘 지켰습니다. 다만 일부 답변에서 긴장한 듯한 표정이 살짝 나타났습니다.",
   },
   chart: {
-    "논리성": 4.5,
-    "전문성": 4.0,
-    "소통능력": 4.0,
-    "태도": 4.5,
-    "자기소개": 5.0
+    일관성: 4,
+    논리성: 4.5,
+    대처능력: 4,
+    구체성: 3.5,
+    말하기방식: 4,
+    면접태도: 3.5,
   },
-  score: 90, // 80 이상이므로 smile.png
+  score: 90,
 };
 
 const MOCK_CLIPS = [
   {
     clipUrl: "/1.webm",
-    thumbnailUrl: "thumbnail.png", // public/thumbnail.png
+    thumbnailUrl: "thumbnail.png",
     feedback: "시선이 잠깐 아래로 내려갔습니다. 답변 중간에도 정면을 바라보세요.",
   },
   {
@@ -65,9 +69,8 @@ const MOCK_CLIPS = [
   },
 ];
 
-// 2. ZIP 다운로드: 진짜 백엔드가 없으므로 더미 zip 생성 (간단하게 Blob으로!)
+// 2. ZIP 다운로드: 진짜 백엔드가 없으므로 더미 zip 생성 (간단하게 Blob으로)
 const createDummyZipBlob = () => {
-  // 실제로는 zip 파일이어야 하지만, 데모용이니 텍스트 파일로 만듦
   const text = "이 파일은 데모용 ZIP 파일입니다.\n실제 분석 결과와는 무관합니다.";
   return new Blob([text], { type: "application/zip" });
 };
@@ -75,9 +78,6 @@ const createDummyZipBlob = () => {
 const FeedbackReport: React.FC = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPdfUploaded, setIsPdfUploaded] = useState(true); // PDF 업로드 항상 true(시연)
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-
-  // pdf 생성용
   const reportRef = useRef<HTMLDivElement>(null);
 
   // PDF 다운로드/업로드: 실제 업로드 없이 Blob만 다운로드
@@ -142,46 +142,44 @@ const FeedbackReport: React.FC = () => {
       ? "/soso.png"
       : "/sad.png";
 
+  // 날짜 표시 (오늘 날짜)
+  const todayStr = new Date().toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-4 pt-12">
-      <div className="text-right">
-        <Button
-          onClick={handleDownload}
-          disabled={isDownloading || !isPdfUploaded}
-        >
+      {/* ZIP/PDF 다운로드 버튼 */}
+      <div className="flex justify-end gap-2">
+        <Button onClick={handleDownload} disabled={isDownloading || !isPdfUploaded}>
           {isDownloading ? "다운로드 중..." : "ZIP 다운로드"}
+        </Button>
+        <Button onClick={handleGeneratePDF}>
+          PDF 저장
         </Button>
       </div>
 
-      <div
-        ref={reportRef}
-        className="space-y-8 bg-white shadow rounded-xl p-6"
-      >
+      <div ref={reportRef} className="space-y-8 bg-white shadow rounded-xl p-6">
         <h1 className="text-3xl font-bold text-center">피드백 리포트</h1>
+        <p className="text-center text-sm text-gray-500">면접 일자: {todayStr}</p>
 
         {/* 종합 소견 + 면접관 표정 */}
         <div className="grid grid-cols-10 gap-4">
           <div className="col-span-7 p-4 border rounded">
-            <h2 className="text-xl font-semibold mb-2 text-center">
-              종합 소견
-            </h2>
+            <h2 className="text-xl font-semibold mb-2 text-center">종합 소견</h2>
             <p>{MOCK_FEEDBACK.summary}</p>
           </div>
           <div className="col-span-3 p-4 border rounded flex flex-col items-center justify-center">
             <h2 className="text-xl font-semibold mb-2">면접관 표정</h2>
-            <img
-              src={expressionImg}
-              alt="표정"
-              className="w-24 h-24"
-            />
+            <img src={expressionImg} alt="표정" className="w-24 h-24" />
           </div>
         </div>
 
         {/* 차트 */}
         <div className="p-4 border rounded mb-6">
-          <h2 className="text-xl font-semibold text-center mb-2">
-            면접 결과 분석
-          </h2>
+          <h2 className="text-xl font-semibold text-center mb-2">면접 결과 분석</h2>
           <Radar
             data={{
               labels: Object.keys(MOCK_FEEDBACK.chart),
@@ -202,9 +200,7 @@ const FeedbackReport: React.FC = () => {
         {/* 상세 분석 */}
         <div className="page-break">
           <div className="p-4 border rounded space-y-4">
-            <h2 className="text-xl font-semibold text-center mb-2">
-              상세 분석
-            </h2>
+            <h2 className="text-xl font-semibold text-center mb-2">상세 분석</h2>
             {Object.entries(MOCK_FEEDBACK.detail).map(([title, content]) => (
               <div key={title}>
                 <h3 className="font-semibold text-lg">{title}</h3>
