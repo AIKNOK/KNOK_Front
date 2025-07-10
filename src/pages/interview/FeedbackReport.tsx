@@ -156,9 +156,6 @@ const FeedbackReport: React.FC = () => {
         <Button onClick={handleDownload} disabled={isDownloading || !isPdfUploaded}>
           {isDownloading ? "다운로드 중..." : "ZIP 다운로드"}
         </Button>
-        <Button onClick={handleGeneratePDF}>
-          PDF 저장
-        </Button>
       </div>
 
       <div ref={reportRef} className="space-y-8 bg-white shadow rounded-xl p-6">
